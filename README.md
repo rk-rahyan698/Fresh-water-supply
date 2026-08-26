@@ -38,7 +38,7 @@ At any moment the owner can answer:
 ```bash
 npm install
 cp .env.example .env.local     # then fill in your Supabase keys
-# run the three SQL migrations in the Supabase SQL editor (see Setup)
+# paste supabase/setup.sql into the Supabase SQL editor (see Setup)
 npm run seed                   # optional demo data
 npm run dev
 ```
@@ -57,8 +57,11 @@ password somewhere safe.
 
 ### 2. Run the migrations
 
-In the Supabase dashboard open **SQL Editor** and run these three files **in
-order**, from `supabase/migrations/`:
+**Easiest path:** open **SQL Editor → New query**, paste the entire contents of
+`supabase/setup.sql`, and hit **Run**. That one file is the three migrations
+concatenated in order, and it is safe to run twice.
+
+Or run them individually **in order**, from `supabase/migrations/`:
 
 | File | What it creates |
 |---|---|
@@ -68,7 +71,8 @@ order**, from `supabase/migrations/`:
 
 They are written to be safe to re-run.
 
-If you prefer the CLI:
+If you prefer the CLI, push the migrations folder (ignore `setup.sql`, which
+would apply the same SQL a second time):
 
 ```bash
 npx supabase link --project-ref <your-project-ref>
@@ -306,7 +310,9 @@ src/
     i18n/                    UI strings (see "Adding Bengali")
     format.ts errors.ts auth.ts env.ts
   types/database.ts          Hand-maintained mirror of the SQL schema
-supabase/migrations/         0001 schema · 0002 functions · 0003 RLS
+supabase/
+  migrations/                0001 schema · 0002 functions · 0003 RLS
+  setup.sql                  the three above, concatenated for the SQL editor
 scripts/                     seed.mts · verify-db.mjs
 ```
 

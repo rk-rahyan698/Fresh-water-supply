@@ -423,3 +423,5 @@ Check whether a payment was voided (Collections → set *Voided* to "Shown").
 Email confirmations are on for new signups. The seeder sets `email_confirm: true`,
 so this usually means `SUPABASE_SERVICE_ROLE_KEY` is wrong or belongs to a
 different project.
+#   F r e s h - w a t e r - s u p p l y  
+ 

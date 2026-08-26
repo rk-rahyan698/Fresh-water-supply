@@ -1,0 +1,186 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  Users,
+  ReceiptText,
+  Wallet,
+  TrendingUp,
+  AlertTriangle,
+  Banknote,
+  ArrowRight,
+} from "lucide-react";
+import { PageHeader, Card, CardHeader } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/button";
+import { PaymentMethodBadge } from "@/components/ui/badge";
+import { MonthlyCollectionChart } from "@/components/charts/monthly-collection-chart";
+import { CollectorCollectionChart } from "@/components/charts/collector-collection-chart";
+import { FilterBar, UrlSelect } from "@/components/filters/url-controls";
+import {
+  getCollectorSeries,
+  getDashboardSummary,
+  getMonthlySeries,
+} from "@/lib/queries/reports";
+import { listPayments } from "@/lib/queries/payments";
+import {
+  dhakaCurrentMonth,
+  formatCurrency,
+  formatDate,
+  formatMonth,
+  monthEnd,
+  monthOptions,
+  toMonthStart,
+} from "@/lib/format";
+import { t } from "@/lib/i18n";
+
+export const metadata: Metadata = { title: "Dashboard" };
+
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const { month: monthParam } = await searchParams;
+  const month = monthParam ? toMonthStart(monthParam) : dhakaCurrentMonth();
+
+  // One round trip each, in parallel - the dashboard is the slowest screen
+  // otherwise, and it is the first thing the owner opens.
+  const [summary, monthly, collectors, recent] = await Promise.all([
+    getDashboardSummary(month),
+    getMonthlySeries(6),
+    getCollectorSeries(month, monthEnd(month)),
+    listPayments({ pageSize: 6 }),
+  ]);
+
+  const monthLabel = formatMonth(month);
+  const collectionRate =
+    summary.billed_amount > 0
+      ? Math.round((Number(summary.collected_amount) / Number(summary.billed_amount)) * 100)
+      : 0;
+
+  return (
+    <>
+      <PageHeader
+        title={t.dashboard.title}
+        description={`${monthLabel} · ${t.dashboard.receivedToday}: ${formatCurrency(summary.received_today)}`}
+      />
+
+      <FilterBar>
+        <UrlSelect
+          param="month"
+          value={month}
+          label={t.common.month}
+          options={monthOptions(18)}
+          className="w-full sm:w-56"
+        />
+      </FilterBar>
+
+      {/* Summary cards - section 13 */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3">
+        <StatCard
+          label={t.dashboard.activeClients}
+          value={summary.active_clients}
+          sub={`${summary.inactive_clients} inactive`}
+          icon={Users}
+          tone="brand"
+          href="/clients"
+        />
+        <StatCard
+          label={`${monthLabel} ${t.dashboard.monthBills}`}
+          value={formatCurrency(summary.billed_amount)}
+          sub={`${summary.bill_count} bills`}
+          icon={ReceiptText}
+          href={`/bills?month=${month}`}
+        />
+        <StatCard
+          label={`${monthLabel} ${t.dashboard.monthCollected}`}
+          value={formatCurrency(summary.collected_amount)}
+          sub={`${collectionRate}% of billed`}
+          icon={TrendingUp}
+          tone="positive"
+        />
+        <StatCard
+          label={`${monthLabel} ${t.dashboard.monthDue}`}
+          value={formatCurrency(summary.due_amount)}
+          sub={`${summary.unpaid_count} unpaid · ${summary.partial_count} partial`}
+          icon={AlertTriangle}
+          tone={Number(summary.due_amount) > 0 ? "danger" : "positive"}
+          href={`/reports/due?month=${month}`}
+        />
+        <StatCard
+          label={t.dashboard.todayCollection}
+          value={formatCurrency(summary.received_today)}
+          sub={`${summary.payments_today} ${t.dashboard.paymentsCount}`}
+          icon={Wallet}
+          href="/reports/daily"
+        />
+        <StatCard
+          label={t.dashboard.unsubmittedCash}
+          value={formatCurrency(summary.unsubmitted_cash)}
+          sub="Cash held by collectors"
+          icon={Banknote}
+          tone={Number(summary.unsubmitted_cash) > 0 ? "warning" : "positive"}
+          href="/submissions"
+        />
+      </div>
+
+      {/* Charts - section 14 */}
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <MonthlyCollectionChart data={monthly} />
+        <CollectorCollectionChart
+          data={collectors}
+          description={`Collected during ${monthLabel}, by whoever took the money.`}
+        />
+      </div>
+
+      {/* Recent activity */}
+      <Card className="mt-4 overflow-hidden">
+        <CardHeader
+          title={t.dashboard.recentPayments}
+          action={
+            <LinkButton href="/collections" variant="secondary" size="sm">
+              {t.common.viewAll}
+              <ArrowRight className="size-4" />
+            </LinkButton>
+          }
+        />
+        {recent.payments.length === 0 ? (
+          <EmptyState
+            title={t.payment.empty}
+            description="Payments recorded by you or your collectors will appear here."
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {recent.payments.map((payment) => (
+              <li key={payment.id}>
+                <Link
+                  href={`/clients/${payment.client_id}`}
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">
+                      {payment.clients?.name ?? "-"}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-ink-soft">
+                      {formatDate(payment.payment_date)} · {payment.collector?.full_name ?? "-"}
+                      {payment.monthly_bills
+                        ? ` · ${formatMonth(payment.monthly_bills.billing_month)}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <PaymentMethodBadge method={payment.payment_method} />
+                    <span className="tnum text-sm font-semibold text-ink">
+                      {formatCurrency(payment.amount)}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
+  );
+}

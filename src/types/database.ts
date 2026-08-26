@@ -1,0 +1,419 @@
+/**
+ * Hand-maintained mirror of supabase/migrations/*.sql.
+ *
+ * Keep this in sync when you change the schema, or regenerate it with:
+ *   npx supabase gen types typescript --project-id <ref> > src/types/database.ts
+ */
+
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+export type UserRole = "admin" | "collector";
+export type ClientStatus = "active" | "inactive";
+export type BillStatus = "unpaid" | "partial" | "paid";
+export type PaymentMethod = "cash" | "bank" | "mobile_banking" | "other";
+
+export interface Database {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          full_name: string;
+          phone: string | null;
+          email: string | null;
+          role: UserRole;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          full_name: string;
+          phone?: string | null;
+          email?: string | null;
+          role?: UserRole;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          full_name?: string;
+          phone?: string | null;
+          email?: string | null;
+          role?: UserRole;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      clients: {
+        Row: {
+          id: string;
+          client_code: string;
+          name: string;
+          phone: string | null;
+          address: string | null;
+          monthly_bill: number;
+          start_date: string;
+          status: ClientStatus;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+          search_text: string;
+        };
+        Insert: {
+          id?: string;
+          client_code: string;
+          name: string;
+          phone?: string | null;
+          address?: string | null;
+          monthly_bill?: number;
+          start_date?: string;
+          status?: ClientStatus;
+          notes?: string | null;
+        };
+        Update: {
+          client_code?: string;
+          name?: string;
+          phone?: string | null;
+          address?: string | null;
+          monthly_bill?: number;
+          start_date?: string;
+          status?: ClientStatus;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      monthly_bills: {
+        Row: {
+          id: string;
+          client_id: string;
+          billing_month: string;
+          bill_amount: number;
+          paid_amount: number;
+          due_amount: number;
+          status: BillStatus;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          billing_month: string;
+          bill_amount: number;
+        };
+        Update: {
+          bill_amount?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "monthly_bills_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payments: {
+        Row: {
+          id: string;
+          receipt_no: number;
+          client_id: string;
+          monthly_bill_id: string;
+          amount: number;
+          payment_date: string;
+          payment_method: PaymentMethod;
+          collected_by: string;
+          notes: string | null;
+          voided_at: string | null;
+          voided_by: string | null;
+          void_reason: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "payments_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payments_monthly_bill_id_fkey";
+            columns: ["monthly_bill_id"];
+            isOneToOne: false;
+            referencedRelation: "monthly_bills";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payments_collected_by_fkey";
+            columns: ["collected_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payments_voided_by_fkey";
+            columns: ["voided_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cash_submissions: {
+        Row: {
+          id: string;
+          collector_id: string;
+          submission_date: string;
+          amount: number;
+          received_by: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "cash_submissions_collector_id_fkey";
+            columns: ["collector_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cash_submissions_received_by_fkey";
+            columns: ["received_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      audit_logs: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          old_data: Json | null;
+          new_data: Json | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: Record<never, never>;
+    Functions: {
+      record_payment: {
+        Args: {
+          p_client_id: string;
+          p_billing_month: string;
+          p_amount: number;
+          p_payment_method?: PaymentMethod;
+          p_notes?: string | null;
+          p_payment_date?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      void_payment: {
+        Args: { p_payment_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      generate_monthly_bills: {
+        Args: { p_billing_month: string };
+        Returns: { created_count: number; skipped_count: number; billed_amount: number }[];
+      };
+      generate_client_bill: {
+        Args: { p_client_id: string; p_billing_month: string };
+        Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
+      };
+      update_bill_amount: {
+        Args: { p_bill_id: string; p_bill_amount: number };
+        Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
+      };
+      create_cash_submission: {
+        Args: {
+          p_collector_id: string;
+          p_amount: number;
+          p_submission_date?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["cash_submissions"]["Row"];
+      };
+      collector_stats: {
+        Args: { p_collector_id: string; p_month?: string | null };
+        Returns: Json;
+      };
+      dashboard_summary: {
+        Args: { p_month?: string | null };
+        Returns: Json;
+      };
+      monthly_series: {
+        Args: { p_months?: number };
+        Returns: {
+          billing_month: string;
+          billed_amount: number;
+          collected_amount: number;
+          due_amount: number;
+        }[];
+      };
+      collector_series: {
+        Args: { p_from?: string | null; p_to?: string | null };
+        Returns: {
+          collector_id: string;
+          collector_name: string;
+          payments_count: number;
+          total_amount: number;
+          cash_amount: number;
+        }[];
+      };
+      daily_collection_report: {
+        Args: { p_date?: string | null };
+        Returns: {
+          collector_id: string;
+          collector_name: string;
+          payments_count: number;
+          total_amount: number;
+        }[];
+      };
+      collector_daily_breakdown: {
+        Args: { p_collector_id: string; p_from: string; p_to: string };
+        Returns: {
+          collection_date: string;
+          payments_count: number;
+          total_amount: number;
+        }[];
+      };
+      update_own_profile: {
+        Args: { p_full_name: string; p_phone?: string | null };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
+      admin_update_profile: {
+        Args: {
+          p_user_id: string;
+          p_full_name: string;
+          p_phone: string | null;
+          p_role: UserRole;
+          p_is_active: boolean;
+        };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
+      upsert_client: {
+        Args: {
+          p_id: string | null;
+          p_client_code: string;
+          p_name: string;
+          p_phone: string | null;
+          p_address: string | null;
+          p_monthly_bill: number;
+          p_start_date: string | null;
+          p_status: ClientStatus;
+          p_notes: string | null;
+        };
+        Returns: Database["public"]["Tables"]["clients"]["Row"];
+      };
+      set_client_status: {
+        Args: { p_client_id: string; p_status: ClientStatus };
+        Returns: Database["public"]["Tables"]["clients"]["Row"];
+      };
+      delete_client: {
+        Args: { p_client_id: string };
+        Returns: undefined;
+      };
+      is_admin: { Args: Record<string, never>; Returns: boolean };
+      is_active_user: { Args: Record<string, never>; Returns: boolean };
+      current_user_role: { Args: Record<string, never>; Returns: UserRole };
+      dhaka_today: { Args: Record<string, never>; Returns: string };
+      dhaka_current_month: { Args: Record<string, never>; Returns: string };
+    };
+    Enums: {
+      user_role: UserRole;
+      client_status: ClientStatus;
+      bill_status: BillStatus;
+      payment_method: PaymentMethod;
+    };
+    CompositeTypes: Record<never, never>;
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Convenience aliases used across the app                                     */
+/* -------------------------------------------------------------------------- */
+
+type Tables = Database["public"]["Tables"];
+
+export type Profile = Tables["profiles"]["Row"];
+export type Client = Tables["clients"]["Row"];
+export type MonthlyBill = Tables["monthly_bills"]["Row"];
+export type Payment = Tables["payments"]["Row"];
+export type CashSubmission = Tables["cash_submissions"]["Row"];
+export type AuditLog = Tables["audit_logs"]["Row"];
+
+/** A bill joined with the client it belongs to. */
+export type BillWithClient = MonthlyBill & {
+  clients: Pick<Client, "id" | "name" | "client_code" | "phone" | "address"> | null;
+};
+
+/** A payment joined with everything the collections table needs to show. */
+export type PaymentDetail = Payment & {
+  clients: Pick<Client, "id" | "name" | "client_code"> | null;
+  monthly_bills: Pick<MonthlyBill, "id" | "billing_month" | "bill_amount"> | null;
+  collector: Pick<Profile, "id" | "full_name"> | null;
+};
+
+export type SubmissionDetail = CashSubmission & {
+  collector: Pick<Profile, "id" | "full_name"> | null;
+  receiver: Pick<Profile, "id" | "full_name"> | null;
+};
+
+/** Shape returned by the collector_stats() RPC. */
+export interface CollectorStats {
+  collector_id: string;
+  today_collection: number;
+  today_count: number;
+  month_collection: number;
+  month_count: number;
+  total_collection: number;
+  total_count: number;
+  cash_collection: number;
+  total_submitted: number;
+  unsubmitted: number;
+}
+
+/** Shape returned by the dashboard_summary() RPC. */
+export interface DashboardSummary {
+  billing_month: string;
+  today: string;
+  active_clients: number;
+  inactive_clients: number;
+  total_outstanding: number;
+  unsubmitted_cash: number;
+  billed_amount: number;
+  collected_amount: number;
+  due_amount: number;
+  bill_count: number;
+  unpaid_count: number;
+  partial_count: number;
+  paid_count: number;
+  received_in_month: number;
+  received_today: number;
+  payments_today: number;
+  payments_in_month: number;
+}

@@ -85,14 +85,7 @@ export default async function AdminClientDetailPage({
           }
         />
 
-        <BillHistoryCard
-          client={client}
-          bills={bills}
-          canCollect
-          renderAdjustAction={(bill) => (
-            <BillAdjustmentButton bill={bill} clientName={client.name} />
-          )}
-        />
+        <BillHistoryCard client={client} bills={bills} canCollect canAdjust />
 
         <PaymentHistoryCard payments={payments} />
       </div>

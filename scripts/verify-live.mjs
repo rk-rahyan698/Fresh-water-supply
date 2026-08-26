@@ -135,13 +135,13 @@ async function main() {
   /* ------------------------------------------------------------- TEST 2/3/6 */
   console.log("\n=== TEST 2 - Partial payment ===");
   console.log("    Bill ৳1,000, Mama collects ৳800 -> due ৳200, PARTIAL");
-  const p1 = await pay(mama, B.client_id, m(B), 800, "Addendum test 2 - Mama");
+  await pay(mama, B.client_id, m(B), 800, "Addendum test 2 - Mama");
   l = await ladder(B.id); show(l);
   check("T2: due 200 and status partial", l.due === 200 && l.status === "partial" && l.paid === 800, JSON.stringify(l));
 
   console.log("\n=== TEST 3 + TEST 6 - Later payment by a DIFFERENT collector ===");
   console.log("    Abbu then collects ৳200 -> total ৳1,000, due ৳0, PAID; both records kept");
-  const p2 = await pay(abbu, B.client_id, m(B), 200, "Addendum test 3/6 - Abbu");
+  await pay(abbu, B.client_id, m(B), 200, "Addendum test 3/6 - Abbu");
   l = await ladder(B.id); show(l);
   check("T3: total paid 1000, due 0, status paid", l.paid === 1000 && l.due === 0 && l.status === "paid", JSON.stringify(l));
 

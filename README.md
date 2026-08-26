@@ -283,6 +283,23 @@ It also covers RLS (a collector cannot read another collector's payments, or
 write to any financial table), payment immutability, void-and-reversal,
 submission caps, and the dashboard aggregates.
 
+### Checking the screens actually render
+
+```bash
+npm run dev          # in one terminal
+npm run verify:pages # in another
+```
+
+Signs in as a real admin and a real collector, borrows the session cookies
+`@supabase/ssr` itself would write, and fetches all 21 screens as those users -
+asserting HTTP 200, no error markers in the HTML, and expected content.
+
+This exists because checking that a protected route redirects to `/login` only
+proves the gate works; it never renders the page. A server/client boundary
+mistake - passing a function to a Client Component, say - passes `tsc`, passes
+`next build`, passes a redirect check, and only breaks when a logged-in person
+opens the screen. So the test logs in and looks.
+
 ---
 
 ## Security model
@@ -394,6 +411,7 @@ trust.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run verify:db` | Run migrations + 57 assertions in PGlite |
 | `npm run verify:migration` | Apply 0004 to a *populated* schema and check nothing breaks |
+| `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run seed` | Demo data (reads `.env.local`) |
 
 ---

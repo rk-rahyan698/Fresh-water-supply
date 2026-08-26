@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { CollectPaymentButton } from "@/components/payments/collect-payment-dialog";
 import { BillFinancialSummary } from "@/components/bills/bill-summary";
+import { BillAdjustmentButton } from "@/components/bills/bill-adjustment-dialog";
 import { formatCurrency, formatDate, formatMonth, formatReceiptNo } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { Client, MonthlyBill } from "@/types/database";
@@ -187,13 +188,19 @@ export function BillHistoryCard({
   client,
   bills,
   canCollect,
-  renderAdjustAction,
+  canAdjust = false,
 }: {
   client: Client;
   bills: MonthlyBill[];
   canCollect: boolean;
-  /** Admin-only per-row adjustment control. */
-  renderAdjustAction?: (bill: MonthlyBill) => React.ReactNode;
+  /**
+   * Admin-only per-row adjustment control.
+   *
+   * A boolean, not a render function: this is a Client Component, and a
+   * function prop cannot cross the server -> client boundary. The button is
+   * imported and rendered here instead.
+   */
+  canAdjust?: boolean;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -212,7 +219,7 @@ export function BillHistoryCard({
                 <TH align="right">{t.bill.paid}</TH>
                 <TH align="right">{t.bill.due}</TH>
                 <TH>{t.bill.status}</TH>
-                {(canCollect || renderAdjustAction) && <TH />}
+                {(canCollect || canAdjust) && <TH />}
               </TR>
             </THead>
             <TBody>
@@ -247,10 +254,12 @@ export function BillHistoryCard({
                   <TD>
                     <BillStatusBadge status={bill.status} />
                   </TD>
-                  {(canCollect || renderAdjustAction) && (
+                  {(canCollect || canAdjust) && (
                     <TD align="right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {renderAdjustAction?.(bill)}
+                        {canAdjust && (
+                          <BillAdjustmentButton bill={bill} clientName={client.name} />
+                        )}
                         {canCollect && Number(bill.due_amount) > 0 && (
                           <CollectPaymentButton
                             clientId={client.id}

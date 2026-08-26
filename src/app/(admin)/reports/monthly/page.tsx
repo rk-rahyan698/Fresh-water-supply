@@ -52,6 +52,11 @@ export default async function MonthlyReportPage({
         <StatCard
           label={t.report.totalBilled}
           value={formatCurrency(report.billedAmount)}
+          sub={
+            report.adjustmentAmount > 0
+              ? `${formatCurrency(report.originalAmount)} less ${formatCurrency(report.adjustmentAmount)}`
+              : undefined
+          }
           icon={ReceiptText}
         />
         <StatCard
@@ -101,6 +106,19 @@ export default async function MonthlyReportPage({
               </TFootRow>
             </Table>
           </TableWrap>
+          {report.adjustmentAmount > 0 && (
+            <div className="border-t border-line bg-brand-50/40 px-4 py-3 text-sm sm:px-5">
+              <p className="text-ink">
+                <strong className="tnum">{formatCurrency(report.adjustmentAmount)}</strong> was
+                waived across {report.adjustedCount}{" "}
+                {report.adjustedCount === 1 ? "bill" : "bills"} this month.
+              </p>
+              <p className="mt-1 text-xs text-ink-faint">
+                Adjustments are discounts the business approved - that money is not owed and is not
+                counted as due.
+              </p>
+            </div>
+          )}
           <div className="border-t border-line px-4 py-3 text-sm text-ink-soft sm:px-5">
             <p>
               Cash received during {formatMonth(month)}:{" "}

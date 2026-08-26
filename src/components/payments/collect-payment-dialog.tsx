@@ -16,6 +16,18 @@ import { dhakaToday, formatCurrency, formatMonth } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { MonthlyBill, PaymentMethod } from "@/types/database";
 
+/** Everything the collect dialog needs to show the adjusted figures. */
+export type BillForCollection = Pick<
+  MonthlyBill,
+  | "billing_month"
+  | "bill_amount"
+  | "adjustment_amount"
+  | "adjusted_amount"
+  | "adjustment_type"
+  | "paid_amount"
+  | "due_amount"
+>;
+
 /** "৳1,000" -> 1000. Accepts what a person actually types or pastes. */
 function parseAmount(value: string): number {
   return Number(value.replace(/[,\s৳]/g, ""));
@@ -73,7 +85,7 @@ export function CollectPaymentDialog({
   onClose: () => void;
   clientId: string;
   clientName: string;
-  bill: Pick<MonthlyBill, "billing_month" | "bill_amount" | "paid_amount" | "due_amount">;
+  bill: BillForCollection;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -82,6 +94,7 @@ export function CollectPaymentDialog({
   const [formError, setFormError] = useState<string | undefined>();
 
   const due = Number(bill.due_amount);
+  const hasAdjustment = Number(bill.adjustment_amount ?? 0) > 0;
   const today = dhakaToday();
 
   const {
@@ -185,10 +198,33 @@ export function CollectPaymentDialog({
       <form id="collect-payment-form" onSubmit={onSubmit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
 
-        <div className="grid grid-cols-3 gap-2 rounded-xl bg-canvas px-3 py-2.5 text-center">
-          <Figure label={t.bill.amount} value={formatCurrency(bill.bill_amount)} />
-          <Figure label={t.bill.paid} value={formatCurrency(bill.paid_amount)} />
-          <Figure label={t.bill.due} value={formatCurrency(due)} tone="danger" />
+        {/* Section 14: the collector sees what is actually owed, and whether a
+            discount is already applied - never just a bare "bill amount". */}
+        <div className="rounded-xl bg-canvas px-3 py-2.5">
+          {hasAdjustment ? (
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <Figure label={t.bill.originalBill} value={formatCurrency(bill.bill_amount)} />
+              <Figure
+                label={t.bill.adjustment}
+                value={`- ${formatCurrency(bill.adjustment_amount)}`}
+                tone="brand"
+              />
+              <Figure label={t.bill.paid} value={formatCurrency(bill.paid_amount)} />
+              <Figure label={t.bill.due} value={formatCurrency(due)} tone="danger" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Figure label={t.bill.amount} value={formatCurrency(bill.bill_amount)} />
+              <Figure label={t.bill.paid} value={formatCurrency(bill.paid_amount)} />
+              <Figure label={t.bill.due} value={formatCurrency(due)} tone="danger" />
+            </div>
+          )}
+          {hasAdjustment && (
+            <p className="mt-2 border-t border-line pt-2 text-center text-xs text-brand-700">
+              {t.bill.adjustedBill}:{" "}
+              <strong className="tnum">{formatCurrency(bill.adjusted_amount)}</strong>
+            </p>
+          )}
         </div>
 
         <div>
@@ -247,13 +283,15 @@ function Figure({
 }: {
   label: string;
   value: string;
-  tone?: "danger";
+  tone?: "danger" | "brand";
 }) {
   return (
     <div>
       <p className="text-xs text-ink-soft">{label}</p>
       <p
-        className={`tnum mt-0.5 text-sm font-semibold ${tone === "danger" ? "text-danger" : "text-ink"}`}
+        className={`tnum mt-0.5 text-sm font-semibold ${
+          tone === "danger" ? "text-danger" : tone === "brand" ? "text-brand-700" : "text-ink"
+        }`}
       >
         {value}
       </p>
@@ -271,7 +309,7 @@ export function CollectPaymentButton({
 }: {
   clientId: string;
   clientName: string;
-  bill: Pick<MonthlyBill, "billing_month" | "bill_amount" | "paid_amount" | "due_amount">;
+  bill: BillForCollection;
   size?: "sm" | "md" | "lg";
   fullWidth?: boolean;
 }) {

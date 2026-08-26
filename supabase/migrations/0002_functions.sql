@@ -550,7 +550,13 @@ begin
 end $fn$;
 
 -- Billed / collected / due for the last N months - dashboard bar chart.
-create or replace function public.monthly_series(p_months integer default 6)
+--
+-- Dropped first rather than CREATE OR REPLACE: a later migration widens this
+-- RETURNS TABLE signature, and Postgres refuses to change a return type in
+-- place. Without the drop, re-running this file after 0004 would fail.
+drop function if exists public.monthly_series(integer);
+
+create function public.monthly_series(p_months integer default 6)
 returns table (
   billing_month date,
   billed_amount numeric,

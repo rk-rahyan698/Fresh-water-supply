@@ -178,7 +178,18 @@ export interface BillListResult {
   total: number;
   page: number;
   pageCount: number;
-  totals: { billed: number; paid: number; due: number };
+  totals: BillTotals;
+}
+
+export interface BillTotals {
+  /** Sum of bill_amount, before adjustments. */
+  original: number;
+  /** Sum of admin-approved discounts / waivers. */
+  adjustment: number;
+  /** Sum of adjusted_amount: paid + due always equals this. */
+  billed: number;
+  paid: number;
+  due: number;
 }
 
 export async function listBills(filters: BillFilters): Promise<BillListResult> {
@@ -213,13 +224,13 @@ export async function listBills(filters: BillFilters): Promise<BillListResult> {
   };
 }
 
-export async function sumBills(
-  filters: BillFilters,
-): Promise<{ billed: number; paid: number; due: number }> {
+export async function sumBills(filters: BillFilters): Promise<BillTotals> {
   const supabase = await createClient();
   let query = supabase
     .from("monthly_bills")
-    .select("bill_amount, paid_amount, due_amount, clients!inner(search_text)")
+    .select(
+      "bill_amount, adjustment_amount, adjusted_amount, paid_amount, due_amount, clients!inner(search_text)",
+    )
     .eq("billing_month", filters.billingMonth);
 
   if (filters.status && filters.status !== "all") {
@@ -232,13 +243,16 @@ export async function sumBills(
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data ?? []).reduce(
+  return (data ?? []).reduce<BillTotals>(
     (acc, row) => ({
-      billed: acc.billed + Number(row.bill_amount),
+      original: acc.original + Number(row.bill_amount),
+      adjustment: acc.adjustment + Number(row.adjustment_amount),
+      // `billed` is the ADJUSTED total, so paid + due always reconciles to it.
+      billed: acc.billed + Number(row.adjusted_amount),
       paid: acc.paid + Number(row.paid_amount),
       due: acc.due + Number(row.due_amount),
     }),
-    { billed: 0, paid: 0, due: 0 },
+    { original: 0, adjustment: 0, billed: 0, paid: 0, due: 0 },
   );
 }
 

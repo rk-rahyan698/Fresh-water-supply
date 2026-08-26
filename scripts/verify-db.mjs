@@ -84,7 +84,12 @@ async function main() {
 
   /* ---------------- Migrations ---------------- */
   console.log("\n== Running migrations ==");
-  for (const file of ["0001_init_schema.sql", "0002_functions.sql", "0003_rls_policies.sql"]) {
+  for (const file of [
+    "0001_init_schema.sql",
+    "0002_functions.sql",
+    "0003_rls_policies.sql",
+    "0004_bill_adjustments.sql",
+  ]) {
     const sql = readFileSync(join(MIGRATIONS, file), "utf8");
     try {
       await db.exec(sql);

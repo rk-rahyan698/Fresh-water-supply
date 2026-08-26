@@ -89,7 +89,13 @@ export default async function AdminDashboardPage({
         <StatCard
           label={`${monthLabel} ${t.dashboard.monthBills}`}
           value={formatCurrency(summary.billed_amount)}
-          sub={`${summary.bill_count} bills`}
+          // billed_amount is the ADJUSTED total, so collected + due reconciles
+          // to it. When a discount exists, show where the number came from.
+          sub={
+            Number(summary.adjustment_amount) > 0
+              ? `${summary.bill_count} bills · ${formatCurrency(summary.original_amount)} less ${formatCurrency(summary.adjustment_amount)} adjusted`
+              : `${summary.bill_count} bills`
+          }
           icon={ReceiptText}
           href={`/bills?month=${month}`}
         />

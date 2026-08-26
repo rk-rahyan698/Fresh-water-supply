@@ -6,6 +6,7 @@ import { BillStatusBadge, ClientStatusBadge, PaymentMethodBadge } from "@/compon
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { CollectPaymentButton } from "@/components/payments/collect-payment-dialog";
+import { BillFinancialSummary } from "@/components/bills/bill-summary";
 import { formatCurrency, formatDate, formatMonth, formatReceiptNo } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { Client, MonthlyBill } from "@/types/database";
@@ -125,12 +126,17 @@ export function CurrentBillCard({
   billingMonth,
   canCollect,
   adminAction,
+  adjustmentAction,
+  approvedBy,
 }: {
   client: Client;
   bill: MonthlyBill | null;
   billingMonth: string;
   canCollect: boolean;
   adminAction?: React.ReactNode;
+  /** Admin-only "Add adjustment" control. */
+  adjustmentAction?: React.ReactNode;
+  approvedBy?: string | null;
 }) {
   if (!bill) {
     return (
@@ -145,8 +151,6 @@ export function CurrentBillCard({
     );
   }
 
-  const due = Number(bill.due_amount);
-
   return (
     <Card>
       <CardHeader
@@ -155,19 +159,11 @@ export function CurrentBillCard({
         action={<BillStatusBadge status={bill.status} />}
       />
       <div className="px-4 py-4 sm:px-5">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <BillFigure label={t.bill.amount} value={formatCurrency(bill.bill_amount)} />
-          <BillFigure label={t.bill.paid} value={formatCurrency(bill.paid_amount)} tone="positive" />
-          <BillFigure
-            label={t.bill.due}
-            value={formatCurrency(due)}
-            tone={due > 0 ? "danger" : "positive"}
-            emphasis
-          />
-        </div>
+        {/* Full ladder so a waived bill never reads like an underpaid one. */}
+        <BillFinancialSummary bill={bill} approvedBy={approvedBy} />
 
-        {canCollect && (
-          <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          {canCollect && (
             <CollectPaymentButton
               clientId={client.id}
               clientName={client.name}
@@ -175,37 +171,11 @@ export function CurrentBillCard({
               size="lg"
               fullWidth
             />
-          </div>
-        )}
+          )}
+          {adjustmentAction}
+        </div>
       </div>
     </Card>
-  );
-}
-
-function BillFigure({
-  label,
-  value,
-  tone,
-  emphasis,
-}: {
-  label: string;
-  value: string;
-  tone?: "danger" | "positive";
-  emphasis?: boolean;
-}) {
-  return (
-    <div className="rounded-xl bg-canvas px-2 py-3">
-      <p className="text-xs text-ink-soft">{label}</p>
-      <p
-        className={[
-          "tnum mt-1 font-semibold",
-          emphasis ? "text-xl" : "text-lg",
-          tone === "danger" ? "text-danger" : tone === "positive" ? "text-positive" : "text-ink",
-        ].join(" ")}
-      >
-        {value}
-      </p>
-    </div>
   );
 }
 
@@ -217,10 +187,13 @@ export function BillHistoryCard({
   client,
   bills,
   canCollect,
+  renderAdjustAction,
 }: {
   client: Client;
   bills: MonthlyBill[];
   canCollect: boolean;
+  /** Admin-only per-row adjustment control. */
+  renderAdjustAction?: (bill: MonthlyBill) => React.ReactNode;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -233,11 +206,13 @@ export function BillHistoryCard({
             <THead>
               <TR>
                 <TH>{t.bill.billingMonth}</TH>
-                <TH align="right">{t.bill.amount}</TH>
+                <TH align="right">{t.bill.originalBill}</TH>
+                <TH align="right">{t.bill.adjustment}</TH>
+                <TH align="right">{t.bill.adjustedBill}</TH>
                 <TH align="right">{t.bill.paid}</TH>
                 <TH align="right">{t.bill.due}</TH>
                 <TH>{t.bill.status}</TH>
-                {canCollect && <TH />}
+                {(canCollect || renderAdjustAction) && <TH />}
               </TR>
             </THead>
             <TBody>
@@ -246,6 +221,18 @@ export function BillHistoryCard({
                   <TD className="font-medium whitespace-nowrap">{formatMonth(bill.billing_month)}</TD>
                   <TD align="right" numeric>
                     {formatCurrency(bill.bill_amount)}
+                  </TD>
+                  <TD align="right" numeric>
+                    {Number(bill.adjustment_amount) > 0 ? (
+                      <span className="text-brand-700">
+                        − {formatCurrency(bill.adjustment_amount)}
+                      </span>
+                    ) : (
+                      <span className="text-ink-faint">{formatCurrency(0)}</span>
+                    )}
+                  </TD>
+                  <TD align="right" numeric className="font-medium">
+                    {formatCurrency(bill.adjusted_amount)}
                   </TD>
                   <TD align="right" numeric className="text-positive">
                     {formatCurrency(bill.paid_amount)}
@@ -260,16 +247,19 @@ export function BillHistoryCard({
                   <TD>
                     <BillStatusBadge status={bill.status} />
                   </TD>
-                  {canCollect && (
+                  {(canCollect || renderAdjustAction) && (
                     <TD align="right">
-                      {Number(bill.due_amount) > 0 && (
-                        <CollectPaymentButton
-                          clientId={client.id}
-                          clientName={client.name}
-                          bill={bill}
-                          size="sm"
-                        />
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {renderAdjustAction?.(bill)}
+                        {canCollect && Number(bill.due_amount) > 0 && (
+                          <CollectPaymentButton
+                            clientId={client.id}
+                            clientName={client.name}
+                            bill={bill}
+                            size="sm"
+                          />
+                        )}
+                      </div>
                     </TD>
                   )}
                 </TR>

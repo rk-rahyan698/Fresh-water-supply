@@ -18,6 +18,7 @@ import {
   TR,
 } from "@/components/ui/table";
 import { FilterBar, UrlSearchInput, UrlSelect } from "@/components/filters/url-controls";
+import { AdjustmentNote } from "@/components/bills/bill-summary";
 import { getDueReport, type DueSort } from "@/lib/queries/reports";
 import { formatCurrency, formatMonth, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
@@ -121,7 +122,20 @@ export default async function DueReportPage({
                       {formatCurrency(row.due_amount)}
                     </span>
                   </div>
-                  <MobileField label={t.bill.amount} value={formatCurrency(row.bill_amount)} />
+                  <MobileField
+                    label={t.bill.adjustedBill}
+                    value={formatCurrency(row.adjusted_amount)}
+                  />
+                  {Number(row.adjustment_amount) > 0 && (
+                    <MobileField
+                      label={t.bill.adjustment}
+                      value={
+                        <span className="text-brand-700">
+                          − {formatCurrency(row.adjustment_amount)}
+                        </span>
+                      }
+                    />
+                  )}
                   <MobileField label={t.bill.paid} value={formatCurrency(row.paid_amount)} />
                   {row.clients?.phone && (
                     <a
@@ -143,7 +157,7 @@ export default async function DueReportPage({
                     <TH>{t.client.one}</TH>
                     <TH>{t.client.phone}</TH>
                     <TH>{t.bill.billingMonth}</TH>
-                    <TH align="right">{t.bill.amount}</TH>
+                    <TH align="right">{t.bill.adjustedBill}</TH>
                     <TH align="right">{t.bill.paid}</TH>
                     <TH align="right">{t.bill.due}</TH>
                     <TH>{t.bill.status}</TH>
@@ -174,7 +188,8 @@ export default async function DueReportPage({
                       </TD>
                       <TD className="whitespace-nowrap">{formatMonth(row.billing_month)}</TD>
                       <TD align="right" numeric>
-                        {formatCurrency(row.bill_amount)}
+                        {formatCurrency(row.adjusted_amount)}
+                        <AdjustmentNote bill={row} />
                       </TD>
                       <TD align="right" numeric className="text-positive">
                         {formatCurrency(row.paid_amount)}

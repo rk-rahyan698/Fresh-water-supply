@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "seed": "node --env-file-if-exists=.env.local scripts/seed.mts",
-    "verify:db": "node scripts/verify-db.mjs"
+    "verify:db": "node scripts/verify-db.mjs",
+    "verify:migration": "node scripts/verify-migration-0004.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

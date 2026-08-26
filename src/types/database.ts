@@ -11,6 +11,7 @@ export type UserRole = "admin" | "collector";
 export type ClientStatus = "active" | "inactive";
 export type BillStatus = "unpaid" | "partial" | "paid";
 export type PaymentMethod = "cash" | "bank" | "mobile_banking" | "other";
+export type AdjustmentType = "discount" | "waiver" | "special_reduction" | "other";
 
 export interface Database {
   public: {
@@ -91,8 +92,18 @@ export interface Database {
           id: string;
           client_id: string;
           billing_month: string;
+          /** The ORIGINAL amount billed, before any adjustment. */
           bill_amount: number;
+          /** Admin-approved discount / waiver. Reduces what the client owes. */
+          adjustment_amount: number;
+          adjustment_type: AdjustmentType | null;
+          adjustment_reason: string | null;
+          adjusted_by: string | null;
+          adjusted_at: string | null;
+          /** bill_amount - adjustment_amount. The amount actually payable. */
+          adjusted_amount: number;
           paid_amount: number;
+          /** adjusted_amount - paid_amount. */
           due_amount: number;
           status: BillStatus;
           created_at: string;
@@ -113,6 +124,13 @@ export interface Database {
             columns: ["client_id"];
             isOneToOne: false;
             referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "monthly_bills_adjusted_by_fkey";
+            columns: ["adjusted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -244,6 +262,19 @@ export interface Database {
         Args: { p_client_id: string; p_billing_month: string };
         Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
       };
+      set_bill_adjustment: {
+        Args: {
+          p_bill_id: string;
+          p_adjustment_amount: number;
+          p_adjustment_type: AdjustmentType | null;
+          p_adjustment_reason: string | null;
+        };
+        Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
+      };
+      remove_bill_adjustment: {
+        Args: { p_bill_id: string };
+        Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
+      };
       update_bill_amount: {
         Args: { p_bill_id: string; p_bill_amount: number };
         Returns: Database["public"]["Tables"]["monthly_bills"]["Row"];
@@ -269,6 +300,9 @@ export interface Database {
         Args: { p_months?: number };
         Returns: {
           billing_month: string;
+          original_amount: number;
+          adjustment_amount: number;
+          /** The ADJUSTED total, so collected + due always equals it. */
           billed_amount: number;
           collected_amount: number;
           due_amount: number;
@@ -348,6 +382,7 @@ export interface Database {
       client_status: ClientStatus;
       bill_status: BillStatus;
       payment_method: PaymentMethod;
+      adjustment_type: AdjustmentType;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -405,10 +440,16 @@ export interface DashboardSummary {
   inactive_clients: number;
   total_outstanding: number;
   unsubmitted_cash: number;
+  /** Sum of bill_amount before adjustments. */
+  original_amount: number;
+  /** Sum of admin-approved discounts / waivers. */
+  adjustment_amount: number;
+  /** Sum of adjusted_amount: collected + due always equals this. */
   billed_amount: number;
   collected_amount: number;
   due_amount: number;
   bill_count: number;
+  adjusted_count: number;
   unpaid_count: number;
   partial_count: number;
   paid_count: number;

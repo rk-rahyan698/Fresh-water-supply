@@ -26,6 +26,9 @@ export async function getDashboardSummary(month?: string): Promise<DashboardSumm
 
 export interface MonthlySeriesPoint {
   billing_month: string;
+  original_amount: number;
+  adjustment_amount: number;
+  /** The ADJUSTED total: collected + due always equals this. */
   billed_amount: number;
   collected_amount: number;
   due_amount: number;
@@ -37,6 +40,8 @@ export async function getMonthlySeries(months = 6): Promise<MonthlySeriesPoint[]
   if (error) throw error;
   return (data ?? []).map((row) => ({
     billing_month: row.billing_month,
+    original_amount: Number(row.original_amount),
+    adjustment_amount: Number(row.adjustment_amount),
     billed_amount: Number(row.billed_amount),
     collected_amount: Number(row.collected_amount),
     due_amount: Number(row.due_amount),
@@ -211,6 +216,12 @@ export interface MonthlyReport {
   billingMonth: string;
   activeClients: number;
   billCount: number;
+  /** Before adjustments. */
+  originalAmount: number;
+  /** Admin-approved discounts / waivers. */
+  adjustmentAmount: number;
+  adjustedCount: number;
+  /** After adjustments: collected + due equals this. */
   billedAmount: number;
   collectedAmount: number;
   dueAmount: number;
@@ -232,6 +243,9 @@ export async function getMonthlyReport(billingMonth: string): Promise<MonthlyRep
     billingMonth,
     activeClients: Number(summary.active_clients),
     billCount: Number(summary.bill_count),
+    originalAmount: Number(summary.original_amount),
+    adjustmentAmount: Number(summary.adjustment_amount),
+    adjustedCount: Number(summary.adjusted_count),
     billedAmount: Number(summary.billed_amount),
     collectedAmount: Number(summary.collected_amount),
     dueAmount: Number(summary.due_amount),

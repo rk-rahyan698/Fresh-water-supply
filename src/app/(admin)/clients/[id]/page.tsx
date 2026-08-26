@@ -12,6 +12,7 @@ import {
   ClientAdminActions,
   GenerateClientBillButton,
 } from "@/components/clients/client-admin-actions";
+import { BillAdjustmentButton } from "@/components/bills/bill-adjustment-dialog";
 import {
   getClient,
   getClientBills,
@@ -71,14 +72,27 @@ export default async function AdminClientDetailPage({
           bill={currentBill}
           billingMonth={currentMonth}
           canCollect
+          approvedBy={currentBill?.adjuster?.full_name}
           adminAction={
             client.status === "active" ? (
               <GenerateClientBillButton clientId={client.id} billingMonth={currentMonth} />
             ) : undefined
           }
+          adjustmentAction={
+            currentBill ? (
+              <BillAdjustmentButton bill={currentBill} clientName={client.name} size="md" />
+            ) : undefined
+          }
         />
 
-        <BillHistoryCard client={client} bills={bills} canCollect />
+        <BillHistoryCard
+          client={client}
+          bills={bills}
+          canCollect
+          renderAdjustAction={(bill) => (
+            <BillAdjustmentButton bill={bill} clientName={client.name} />
+          )}
+        />
 
         <PaymentHistoryCard payments={payments} />
       </div>

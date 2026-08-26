@@ -81,8 +81,14 @@ export default async function BillsPage({
         />
       </FilterBar>
 
-      <div className="mb-3 grid grid-cols-3 gap-2.5">
-        <StatCard label={t.report.totalBilled} value={formatCurrency(totals.billed)} />
+      <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <StatCard label={t.bill.originalBill} value={formatCurrency(totals.original)} />
+        <StatCard
+          label={t.bill.adjustment}
+          value={formatCurrency(totals.adjustment)}
+          tone={totals.adjustment > 0 ? "brand" : "default"}
+          sub={totals.adjustment > 0 ? "Discounts / waivers" : undefined}
+        />
         <StatCard label={t.report.totalCollected} value={formatCurrency(totals.paid)} tone="positive" />
         <StatCard
           label={t.report.totalDue}
@@ -117,7 +123,23 @@ export default async function BillsPage({
                     </Link>
                     <BillStatusBadge status={bill.status} />
                   </div>
-                  <MobileField label={t.bill.amount} value={formatCurrency(bill.bill_amount)} />
+                  <MobileField label={t.bill.originalBill} value={formatCurrency(bill.bill_amount)} />
+                  {Number(bill.adjustment_amount) > 0 && (
+                    <>
+                      <MobileField
+                        label={t.bill.adjustment}
+                        value={
+                          <span className="text-brand-700">
+                            − {formatCurrency(bill.adjustment_amount)}
+                          </span>
+                        }
+                      />
+                      <MobileField
+                        label={t.bill.adjustedBill}
+                        value={formatCurrency(bill.adjusted_amount)}
+                      />
+                    </>
+                  )}
                   <MobileField label={t.bill.paid} value={formatCurrency(bill.paid_amount)} />
                   <MobileField
                     label={t.bill.due}
@@ -138,7 +160,9 @@ export default async function BillsPage({
                   <TR>
                     <TH>{t.client.one}</TH>
                     <TH>{t.client.code}</TH>
-                    <TH align="right">{t.bill.amount}</TH>
+                    <TH align="right">{t.bill.originalBill}</TH>
+                    <TH align="right">{t.bill.adjustment}</TH>
+                    <TH align="right">{t.bill.adjustedBill}</TH>
                     <TH align="right">{t.bill.paid}</TH>
                     <TH align="right">{t.bill.due}</TH>
                     <TH>{t.bill.status}</TH>
@@ -158,6 +182,18 @@ export default async function BillsPage({
                       <TD className="text-ink-soft">{bill.clients?.client_code}</TD>
                       <TD align="right" numeric>
                         {formatCurrency(bill.bill_amount)}
+                      </TD>
+                      <TD align="right" numeric>
+                        {Number(bill.adjustment_amount) > 0 ? (
+                          <span className="text-brand-700">
+                            − {formatCurrency(bill.adjustment_amount)}
+                          </span>
+                        ) : (
+                          <span className="text-ink-faint">{formatCurrency(0)}</span>
+                        )}
+                      </TD>
+                      <TD align="right" numeric className="font-medium">
+                        {formatCurrency(bill.adjusted_amount)}
                       </TD>
                       <TD align="right" numeric className="text-positive">
                         {formatCurrency(bill.paid_amount)}

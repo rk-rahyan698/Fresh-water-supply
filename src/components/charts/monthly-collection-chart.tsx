@@ -21,6 +21,8 @@ import type { MonthlySeriesPoint } from "@/lib/queries/reports";
 interface Row {
   month: string;
   label: string;
+  original: number;
+  adjustment: number;
   billed: number;
   collected: number;
   due: number;
@@ -35,6 +37,8 @@ export function MonthlyCollectionChart({ data }: { data: MonthlySeriesPoint[] })
   const rows: Row[] = data.map((point) => ({
     month: point.billing_month,
     label: formatMonthShort(point.billing_month),
+    original: point.original_amount,
+    adjustment: point.adjustment_amount,
     billed: point.billed_amount,
     collected: point.collected_amount,
     due: point.due_amount,
@@ -45,7 +49,7 @@ export function MonthlyCollectionChart({ data }: { data: MonthlySeriesPoint[] })
   return (
     <ChartCard
       title={t.dashboard.monthlyChart}
-      description="Each bar is the month's total bill, split into what has been collected and what is still due."
+      description="Each bar is the month's payable bill after any discount, split into collected and still due."
       chart={
         hasData ? (
           <div>
@@ -166,6 +170,12 @@ function MonthlyTooltip({
     <div className="rounded-xl border border-line bg-surface px-3 py-2.5 shadow-lg">
       <p className="mb-1.5 text-xs font-semibold text-ink">{formatMonthShort(row.month)}</p>
       <dl className="space-y-1 text-xs">
+        {row.adjustment > 0 && (
+          <>
+            <TooltipRow label={t.bill.originalBill} value={formatCurrency(row.original)} />
+            <TooltipRow label={t.bill.adjustment} value={`- ${formatCurrency(row.adjustment)}`} />
+          </>
+        )}
         <TooltipRow label={t.report.totalBilled} value={formatCurrency(row.billed)} />
         <TooltipRow
           label={t.dashboard.monthCollected}
@@ -197,6 +207,8 @@ function MonthlyTable({ rows }: { rows: Row[] }) {
         <THead>
           <TR>
             <TH>{t.common.month}</TH>
+            <TH align="right">{t.bill.originalBill}</TH>
+            <TH align="right">{t.bill.adjustment}</TH>
             <TH align="right">{t.report.totalBilled}</TH>
             <TH align="right">{t.report.totalCollected}</TH>
             <TH align="right">{t.report.totalDue}</TH>
@@ -206,6 +218,12 @@ function MonthlyTable({ rows }: { rows: Row[] }) {
           {[...rows].reverse().map((row) => (
             <TR key={row.month}>
               <TD>{formatMonthShort(row.month)}</TD>
+              <TD align="right" numeric>
+                {formatCurrency(row.original)}
+              </TD>
+              <TD align="right" numeric className={row.adjustment > 0 ? "text-brand-700" : "text-ink-faint"}>
+                {row.adjustment > 0 ? `− ${formatCurrency(row.adjustment)}` : formatCurrency(0)}
+              </TD>
               <TD align="right" numeric>
                 {formatCurrency(row.billed)}
               </TD>

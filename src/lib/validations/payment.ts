@@ -43,3 +43,32 @@ export const generateClientBillSchema = z.object({
   client_id: uuid,
   billing_month: monthString,
 });
+
+/* -------------------------------------------------------------------------- */
+/* Bill adjustments - discount / waiver (admin only)                           */
+/* -------------------------------------------------------------------------- */
+
+export const adjustmentTypeSchema = z.enum([
+  "discount",
+  "waiver",
+  "special_reduction",
+  "other",
+]);
+
+/**
+ * An adjustment ALWAYS carries a type and a reason. The owner has to be able to
+ * look back and understand why a bill was reduced, so the reason is required
+ * here, in the SQL function, and by a CHECK constraint on the table.
+ */
+export const billAdjustmentSchema = z.object({
+  bill_id: uuid,
+  adjustment_amount: moneyAmount,
+  adjustment_type: adjustmentTypeSchema,
+  adjustment_reason: z
+    .string()
+    .trim()
+    .min(3, "Give a reason (at least 3 characters)")
+    .max(300, "Reason is too long"),
+});
+
+export type BillAdjustmentInput = z.input<typeof billAdjustmentSchema>;

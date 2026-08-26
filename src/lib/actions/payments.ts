@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { actionError, actionOk, type ActionResult } from "@/lib/errors";
 import {
+  billAdjustmentSchema,
   billAmountSchema,
   generateBillsSchema,
   generateClientBillSchema,
@@ -184,6 +185,65 @@ export async function updateBillAmountAction(
   const { data, error } = await supabase.rpc("update_bill_amount", {
     p_bill_id: parsed.data.bill_id,
     p_bill_amount: parsed.data.bill_amount,
+  });
+
+  if (error) return actionError(error);
+
+  const bill = data as unknown as MonthlyBill;
+  revalidateMoney(bill.client_id);
+  return actionOk(null);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Bill adjustments - discount / waiver                                        */
+/*                                                                             */
+/* Admin only. A collector must never be able to quietly reduce a bill, so     */
+/* requireAdmin() runs here AND set_bill_adjustment() re-checks the role from  */
+/* the JWT, stamping adjusted_by itself rather than trusting the form.         */
+/* -------------------------------------------------------------------------- */
+
+type AdjustmentState = ActionResult<{ billId: string }> | null;
+
+export async function setBillAdjustmentAction(
+  _prev: AdjustmentState,
+  formData: FormData,
+): Promise<AdjustmentState> {
+  await requireAdmin();
+
+  const parsed = billAdjustmentSchema.safeParse({
+    bill_id: formData.get("bill_id"),
+    adjustment_amount: formData.get("adjustment_amount"),
+    adjustment_type: formData.get("adjustment_type"),
+    adjustment_reason: formData.get("adjustment_reason"),
+  });
+
+  if (!parsed.success) {
+    return actionError("Please check the form.", fieldErrorsFrom(parsed.error));
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_bill_adjustment", {
+    p_bill_id: parsed.data.bill_id,
+    p_adjustment_amount: parsed.data.adjustment_amount,
+    p_adjustment_type: parsed.data.adjustment_type,
+    p_adjustment_reason: parsed.data.adjustment_reason,
+  });
+
+  if (error) return actionError(error);
+
+  const bill = data as unknown as MonthlyBill;
+  revalidateMoney(bill.client_id);
+  return actionOk({ billId: bill.id });
+}
+
+export async function removeBillAdjustmentAction(
+  billId: string,
+): Promise<ActionResult<null>> {
+  await requireAdmin();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("remove_bill_adjustment", {
+    p_bill_id: billId,
   });
 
   if (error) return actionError(error);

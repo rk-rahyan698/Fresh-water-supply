@@ -29,6 +29,15 @@ const MESSAGES: Record<string, (detail: Detail) => string> = {
   BILL_BELOW_PAID: (d) =>
     `The bill cannot be less than the ${formatCurrency(Number(d))} already collected against it.`,
   FUTURE_BILLING_MONTH: () => "You cannot generate bills for a future month.",
+  BILL_BELOW_ADJUSTMENT: (d) =>
+    `The bill cannot be less than the ${formatCurrency(Number(d))} adjustment already applied to it.`,
+
+  ADJUSTMENT_REASON_REQUIRED: () => "Please give a reason for this adjustment.",
+  ADJUSTMENT_TYPE_REQUIRED: () => "Please choose an adjustment type.",
+  ADJUSTMENT_EXCEEDS_BILL: (d) =>
+    `An adjustment cannot be more than the bill itself (${formatCurrency(Number(d))}).`,
+  ADJUSTMENT_BELOW_PAID: (d) =>
+    `That would waive money already collected. The most you can adjust is ${formatCurrency(Number(d))}. Void a payment first if you need to go further.`,
 
   PAYMENT_EXCEEDS_DUE: (d) =>
     `That is more than the outstanding due of ${formatCurrency(Number(d))}. Overpayment is not allowed.`,

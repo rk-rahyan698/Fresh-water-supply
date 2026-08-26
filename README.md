@@ -22,6 +22,7 @@ At any moment the owner can answer:
 - [Setup](#setup)
 - [Demo data](#demo-data)
 - [How the money works](#how-the-money-works)
+- [Discounts vs. underpayment](#discounts-vs-underpayment)
 - [Financial integrity](#financial-integrity)
 - [Security model](#security-model)
 - [Screens](#screens)
@@ -68,6 +69,7 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0001_init_schema.sql` | Tables, enums, generated columns, triggers |
 | `0002_functions.sql` | Every money-moving operation, as SQL functions |
 | `0003_rls_policies.sql` | Row Level Security policies and grants |
+| `0004_bill_adjustments.sql` | Discounts / waivers, and adjustment-aware due + status |
 
 They are written to be safe to re-run.
 
@@ -166,9 +168,49 @@ Only `cash` payments are reconciled this way — bank transfers and mobile banki
 never pass through the collector's hands, so counting them would inflate what
 the collector appears to owe.
 
-**4. Corrections.** Payments are never edited or deleted. An admin *voids* a
+**4. Adjustments.** An admin can reduce a bill with a discount or waiver. See
+below - this is the distinction that a paper ledger usually loses.
+
+**5. Corrections.** Payments are never edited or deleted. An admin *voids* a
 payment with a reason; the amount returns to the client's due and the
 transaction stays in the record, marked voided.
+
+---
+
+## Discounts vs. underpayment
+
+Two situations look identical on paper and mean opposite things:
+
+| | Bill | Adjustment | Paid | Due | Status |
+|---|---|---|---|---|---|
+| Client short-paid | ৳1,000 | ৳0 | ৳800 | **৳200** | Partial |
+| Business gave a discount | ৳1,000 | **৳200** | ৳800 | **৳0** | Paid |
+
+Both took ৳800 against a ৳1,000 bill. In the first the client still owes ৳200;
+in the second they owe nothing. The app keeps them apart:
+
+```
+adjusted_amount = bill_amount - adjustment_amount     (what is actually owed)
+due_amount      = adjusted_amount - total valid payments
+```
+
+`bill_amount` always holds the **original** figure, so the discount never
+disappears from the record. Every bill view shows the full ladder - Original ->
+Adjustment -> Adjusted -> Paid -> Due - so nobody has to guess which case they
+are looking at.
+
+**Only an admin can adjust a bill.** A collector records payments and nothing
+else, which is what stops a bill being quietly reduced in the field.
+`set_bill_adjustment()` re-checks the role from the JWT and stamps `adjusted_by`
+itself, so the form cannot claim someone else approved it.
+
+**Every adjustment needs a type and a reason** (discount, waiver, special
+reduction, other). That is enforced in the form, in the SQL function, *and* by a
+CHECK constraint - a row with an adjustment but no reason cannot exist. The
+reason, the approver and the timestamp all show on the bill.
+
+An adjustment can never exceed the bill, and can never waive money already
+collected - void the payment first if you really need to go further.
 
 ---
 
@@ -184,6 +226,9 @@ write arrives.
 | Status matches the amounts | `status` is a `GENERATED` column, not app logic |
 | `paid_amount` never drifts | Recomputed by trigger as `SUM(payments)` where not voided — app code never writes it |
 | No duplicate bills | `UNIQUE (client_id, billing_month)` |
+| An adjustment never exceeds the bill | `CHECK (adjustment_amount <= bill_amount)` |
+| An adjustment always has a type, reason and approver | `CHECK` on the metadata columns - a reasonless adjustment cannot be stored |
+| Only admins adjust | `set_bill_adjustment()` calls `require_admin()`; collectors have no write path |
 | Payments are immutable | Trigger rejects `DELETE`, and rejects `UPDATE` of anything but the void fields |
 | No overpayment | `record_payment()` re-reads the bill `FOR UPDATE`, so concurrent collections cannot race past the limit |
 | No over-submission | `create_cash_submission()` locks the collector row and checks the balance |
@@ -215,7 +260,23 @@ including both acceptance scenarios from the spec:
   PASS  after 500 more: Paid 1500 / Due 0 / paid
   PASS  both partial payments kept as separate transactions
 
-RESULT: 54 passed, 0 failed
+RESULT: 57 passed, 0 failed
+```
+
+`npm run verify:migration` covers the adjustment feature separately (32 more
+assertions). It builds the pre-adjustment schema, fills it with bills and
+payments, applies `0004` on top, and checks that nothing was lost or
+recalculated wrongly - because production already holds data when that
+migration runs:
+
+```
+== Addendum Test 4: business discount ==
+  PASS  Test 4 result: paid 800, DUE 0, status PAID (not partial)
+== Addendum Test 5: discount + partial payment ==
+  PASS  Test 5 result: adjusted 800, paid 600, due 200, PARTIAL
+== Section 9: partial payment is NOT a discount ==
+  PASS  Karim (no adjustment) still owes 200
+  PASS  Sabbir (adjusted) owes nothing, though both paid 800
 ```
 
 It also covers RLS (a collector cannot read another collector's payments, or
@@ -311,9 +372,9 @@ src/
     format.ts errors.ts auth.ts env.ts
   types/database.ts          Hand-maintained mirror of the SQL schema
 supabase/
-  migrations/                0001 schema · 0002 functions · 0003 RLS
+  migrations/                0001 schema · 0002 functions · 0003 RLS · 0004 adjustments
   setup.sql                  the three above, concatenated for the SQL editor
-scripts/                     seed.mts · verify-db.mjs
+scripts/                     seed.mts · verify-db.mjs · verify-migration-0004.mjs
 ```
 
 Forms use React Hook Form + Zod. **The same Zod schema runs again inside the
@@ -331,7 +392,8 @@ trust.
 | `npm start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run verify:db` | Run migrations + 54 assertions in PGlite |
+| `npm run verify:db` | Run migrations + 57 assertions in PGlite |
+| `npm run verify:migration` | Apply 0004 to a *populated* schema and check nothing breaks |
 | `npm run seed` | Demo data (reads `.env.local`) |
 
 ---
@@ -423,5 +485,6 @@ Check whether a payment was voided (Collections → set *Voided* to "Shown").
 Email confirmations are on for new signups. The seeder sets `email_confirm: true`,
 so this usually means `SUPABASE_SERVICE_ROLE_KEY` is wrong or belongs to a
 different project.
-#   F r e s h - w a t e r - s u p p l y  
+#   F r e s h - w a t e r - s u p p l y 
+ 
  

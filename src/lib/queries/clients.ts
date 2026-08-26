@@ -65,15 +65,27 @@ export async function getClient(id: string): Promise<Client | null> {
   return data;
 }
 
-/** Every bill for a client, newest month first. */
-export async function getClientBills(clientId: string, limit = 24): Promise<MonthlyBill[]> {
+/** A bill plus the admin who approved its adjustment, when there is one. */
+export type ClientBill = MonthlyBill & {
+  adjuster: Pick<Profile, "id" | "full_name"> | null;
+};
+
+/**
+ * Every bill for a client, newest month first.
+ *
+ * The adjuster is embedded so the bill card can say who approved a discount.
+ * RLS narrows profiles to the caller's own row for collectors, so they simply
+ * see no name - which is fine, they cannot adjust bills anyway.
+ */
+export async function getClientBills(clientId: string, limit = 24): Promise<ClientBill[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("monthly_bills")
-    .select("*")
+    .select("*, adjuster:profiles!monthly_bills_adjusted_by_fkey(id, full_name)")
     .eq("client_id", clientId)
     .order("billing_month", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .overrideTypes<ClientBill[], { merge: false }>();
   if (error) throw error;
   return data ?? [];
 }

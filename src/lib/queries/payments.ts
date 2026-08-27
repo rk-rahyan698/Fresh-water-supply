@@ -27,6 +27,7 @@ export interface PaymentFilters {
   clientId?: string;
   /** Matches client name, code, phone or address. */
   search?: string;
+  areaId?: string;
   method?: PaymentMethod;
   includeVoided?: boolean;
   page?: number;
@@ -50,7 +51,7 @@ export async function listPayments(filters: PaymentFilters = {}): Promise<Paymen
   // monthly_bills uses !inner so the billingMonth filter below can reach into
   // the embedded row. Every payment always has a bill, so this never drops rows.
   const select =
-    "*, clients!inner(id, name, client_code), monthly_bills!inner(id, billing_month, bill_amount), " +
+    "*, clients!inner(id, name, client_code, area_id), monthly_bills!inner(id, billing_month, bill_amount), " +
     "collector:profiles!payments_collected_by_fkey(id, full_name)";
 
   let query = supabase
@@ -83,7 +84,7 @@ export async function sumPayments(filters: PaymentFilters = {}): Promise<number>
   const supabase = await createClient();
   let query = supabase
     .from("payments")
-    .select("amount, monthly_bills!inner(billing_month), clients!inner(search_text)");
+    .select("amount, monthly_bills!inner(billing_month), clients!inner(search_text, area_id)");
   query = applyPaymentFilters(query, filters);
   const { data, error } = await query;
   if (error) throw error;
@@ -108,6 +109,7 @@ function applyPaymentFilters<T extends { eq: any; gte: any; lte: any; is: any; i
   if (filters.search?.trim()) {
     q = q.ilike("clients.search_text", `%${escapeLike(filters.search.trim())}%`);
   }
+  if (filters.areaId) q = q.eq("clients.area_id", filters.areaId);
   return q as T;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -165,12 +167,17 @@ export interface BillFilters {
   billingMonth: string;
   status?: BillStatus | "all";
   search?: string;
+  areaId?: string;
   page?: number;
   pageSize?: number;
 }
 
 export type BillRow = MonthlyBill & {
-  clients: Pick<Client, "id" | "name" | "client_code" | "phone" | "status"> | null;
+  clients:
+    | (Pick<Client, "id" | "name" | "client_code" | "phone" | "status" | "area_id"> & {
+        areas: { name: string } | null;
+      })
+    | null;
 };
 
 export interface BillListResult {
@@ -200,13 +207,18 @@ export async function listBills(filters: BillFilters): Promise<BillListResult> {
 
   let query = supabase
     .from("monthly_bills")
-    .select("*, clients!inner(id, name, client_code, phone, status)", { count: "exact" })
+    .select("*, clients!inner(id, name, client_code, phone, status, area_id, areas(name))", {
+      count: "exact",
+    })
     .eq("billing_month", filters.billingMonth)
     .order("due_amount", { ascending: false })
     .range(from, from + pageSize - 1);
 
   if (filters.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
+  }
+  if (filters.areaId) {
+    query = query.eq("clients.area_id", filters.areaId);
   }
   if (filters.search?.trim()) {
     query = query.ilike("clients.search_text", `%${escapeLike(filters.search.trim())}%`);
@@ -229,12 +241,15 @@ export async function sumBills(filters: BillFilters): Promise<BillTotals> {
   let query = supabase
     .from("monthly_bills")
     .select(
-      "bill_amount, adjustment_amount, adjusted_amount, paid_amount, due_amount, clients!inner(search_text)",
+      "bill_amount, adjustment_amount, adjusted_amount, paid_amount, due_amount, clients!inner(search_text, area_id)",
     )
     .eq("billing_month", filters.billingMonth);
 
   if (filters.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
+  }
+  if (filters.areaId) {
+    query = query.eq("clients.area_id", filters.areaId);
   }
   if (filters.search?.trim()) {
     query = query.ilike("clients.search_text", `%${escapeLike(filters.search.trim())}%`);

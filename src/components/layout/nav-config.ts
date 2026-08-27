@@ -10,6 +10,7 @@ import {
   CalendarDays,
   UserCog,
   Settings,
+  Map as MapIcon,
   Wallet,
   CircleUser,
   MoreHorizontal,
@@ -35,6 +36,7 @@ const ADMIN_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
       { href: "/clients", label: t.nav.clients, icon: Users, prefix: true },
+      { href: "/areas", label: t.area.many, icon: MapIcon },
       { href: "/bills", label: t.nav.bills, icon: ReceiptText },
       { href: "/collections", label: t.nav.collections, icon: HandCoins },
       { href: "/submissions", label: t.nav.submissions, icon: Banknote },
@@ -44,6 +46,7 @@ const ADMIN_SECTIONS: NavSection[] = [
     heading: t.nav.reports,
     items: [
       { href: "/reports/due", label: t.nav.dueReport, icon: FileWarning },
+      { href: "/reports/area", label: t.area.summary, icon: MapIcon },
       { href: "/reports/collector", label: t.nav.collectorReport, icon: UserCheck },
       { href: "/reports/monthly", label: t.nav.monthlyReport, icon: CalendarRange },
       { href: "/reports/daily", label: t.nav.dailyReport, icon: CalendarDays },

@@ -96,21 +96,29 @@ const USERS = [
   { key: "jamal", email: "jamal@watersupply.demo", name: "Jamal", role: "collector", phone: "01710000003" },
 ] as const;
 
+/** Areas the demo clients are grouped into. */
+const AREAS = [
+  { name: "Mirpur", description: "Mirpur 1 to 10" },
+  { name: "Kazipara", description: "Kazipara and around" },
+  { name: "Shewrapara", description: "Shewrapara" },
+  { name: "Pallabi", description: "Pallabi and Mirpur 11-12" },
+] as const;
+
 const CLIENTS = [
-  { code: "C-0001", name: "Rahim Uddin", phone: "01810000001", address: "House 12, Road 3, Mirpur", bill: 1000 },
-  { code: "C-0002", name: "Karim Sheikh", phone: "01810000002", address: "House 45, Road 7, Mirpur", bill: 1500 },
-  { code: "C-0003", name: "Salma Begum", phone: "01810000003", address: "Flat 4B, Green Tower, Kazipara", bill: 1200 },
-  { code: "C-0004", name: "Jahangir Alam", phone: "01810000004", address: "House 9, Shewrapara", bill: 800 },
-  { code: "C-0005", name: "Nasrin Akter", phone: "01810000005", address: "House 21, Road 2, Pallabi", bill: 1000 },
-  { code: "C-0006", name: "Mizanur Rahman", phone: "01810000006", address: "Shop 5, Mirpur Bazar", bill: 2500 },
-  { code: "C-0007", name: "Farida Yasmin", phone: "01810000007", address: "Flat 2A, Rose Villa, Kazipara", bill: 1200 },
-  { code: "C-0008", name: "Abdul Malek", phone: "01810000008", address: "House 33, Road 5, Mirpur", bill: 900 },
-  { code: "C-0009", name: "Ruma Khatun", phone: "01810000009", address: "House 8, Shewrapara", bill: 1000 },
-  { code: "C-0010", name: "Shahin Mia", phone: "01810000010", address: "Tea stall, Pallabi Mor", bill: 700 },
-  { code: "C-0011", name: "Nurul Islam", phone: "01810000011", address: "House 17, Road 9, Mirpur", bill: 1500 },
-  { code: "C-0012", name: "Taslima Nasrin", phone: "01810000012", address: "Flat 6C, Sky View, Kazipara", bill: 1300 },
-  { code: "C-0013", name: "Kamal Hossain", phone: "01810000013", address: "Garage, Mirpur 10", bill: 2000 },
-  { code: "C-0014", name: "Ayesha Siddika", phone: "01810000014", address: "House 4, Road 1, Pallabi", bill: 1000 },
+  { code: "C-0001", name: "Rahim Uddin", phone: "01810000001", address: "House 12, Road 3, Mirpur", bill: 1000, area: "Mirpur" },
+  { code: "C-0002", name: "Karim Sheikh", phone: "01810000002", address: "House 45, Road 7, Mirpur", bill: 1500, area: "Mirpur" },
+  { code: "C-0003", name: "Salma Begum", phone: "01810000003", address: "Flat 4B, Green Tower, Kazipara", bill: 1200, area: "Kazipara" },
+  { code: "C-0004", name: "Jahangir Alam", phone: "01810000004", address: "House 9, Shewrapara", bill: 800, area: "Shewrapara" },
+  { code: "C-0005", name: "Nasrin Akter", phone: "01810000005", address: "House 21, Road 2, Pallabi", bill: 1000, area: "Pallabi" },
+  { code: "C-0006", name: "Mizanur Rahman", phone: "01810000006", address: "Shop 5, Mirpur Bazar", bill: 2500, area: "Mirpur" },
+  { code: "C-0007", name: "Farida Yasmin", phone: "01810000007", address: "Flat 2A, Rose Villa, Kazipara", bill: 1200, area: "Kazipara" },
+  { code: "C-0008", name: "Abdul Malek", phone: "01810000008", address: "House 33, Road 5, Mirpur", bill: 900, area: "Mirpur" },
+  { code: "C-0009", name: "Ruma Khatun", phone: "01810000009", address: "House 8, Shewrapara", bill: 1000, area: "Shewrapara" },
+  { code: "C-0010", name: "Shahin Mia", phone: "01810000010", address: "Tea stall, Pallabi Mor", bill: 700, area: "Pallabi" },
+  { code: "C-0011", name: "Nurul Islam", phone: "01810000011", address: "House 17, Road 9, Mirpur", bill: 1500, area: "Mirpur" },
+  { code: "C-0012", name: "Taslima Nasrin", phone: "01810000012", address: "Flat 6C, Sky View, Kazipara", bill: 1300, area: "Kazipara" },
+  { code: "C-0013", name: "Kamal Hossain", phone: "01810000013", address: "Garage, Mirpur 10", bill: 2000, area: "Mirpur" },
+  { code: "C-0014", name: "Ayesha Siddika", phone: "01810000014", address: "House 4, Road 1, Pallabi", bill: 1000, area: "Pallabi" },
 ] as const;
 
 /* -------------------------------------------------------------------------- */
@@ -164,7 +172,36 @@ async function seedUsers(): Promise<Record<string, string>> {
   return ids;
 }
 
-async function seedClients(): Promise<Record<string, string>> {
+async function seedAreas(): Promise<Record<string, string>> {
+  step("Creating areas");
+
+  const ids: Record<string, string> = {};
+  for (const area of AREAS) {
+    const { data: existing } = await admin
+      .from("areas")
+      .select("id")
+      .eq("name", area.name)
+      .maybeSingle();
+
+    if (existing) {
+      ids[area.name] = existing.id;
+      continue;
+    }
+
+    const { data, error } = await admin
+      .from("areas")
+      .insert({ name: area.name, description: area.description, is_active: true })
+      .select("id")
+      .single();
+    if (error) throw new Error(`Creating area ${area.name}: ${error.message}`);
+    ids[area.name] = data.id;
+  }
+
+  log(`  ${AREAS.length} areas ready`);
+  return ids;
+}
+
+async function seedClients(areaIds: Record<string, string>): Promise<Record<string, string>> {
   step("Creating clients");
 
   const startDate = monthStart(-3);
@@ -179,6 +216,12 @@ async function seedClients(): Promise<Record<string, string>> {
 
     if (existing) {
       ids[client.code] = existing.id;
+      // Backfill the area on a client created before areas existed.
+      await admin
+        .from("clients")
+        .update({ area_id: areaIds[client.area] })
+        .eq("id", existing.id)
+        .is("area_id", null);
       continue;
     }
 
@@ -192,6 +235,7 @@ async function seedClients(): Promise<Record<string, string>> {
         monthly_bill: client.bill,
         start_date: startDate,
         status: "active",
+        area_id: areaIds[client.area],
       })
       .select("id")
       .single();
@@ -364,6 +408,38 @@ async function seedSubmissions(
   }
 }
 
+/**
+ * Schedules one future rate change so the feature is visible in the demo:
+ * next month's bill for C-0001 goes up, while every past bill stays put.
+ */
+async function seedRateChange(
+  adminClient: SupabaseClient,
+  clientIds: Record<string, string>,
+): Promise<void> {
+  step("Scheduling a rate change (as Abbu)");
+
+  const { count } = await admin
+    .from("client_rate_history")
+    .select("id", { count: "exact", head: true });
+  if ((count ?? 0) > 0) {
+    log(`  ${count} rate changes already exist - skipping.`);
+    return;
+  }
+
+  const nextMonth = monthStart(1);
+  const { error } = await adminClient.rpc("set_client_rate", {
+    p_client_id: clientIds["C-0001"],
+    p_monthly_bill: 1200,
+    p_effective_from: nextMonth,
+    p_reason: "Annual revision",
+  });
+  if (error) {
+    log(`  ! rate change: ${error.message}`);
+    return;
+  }
+  log(`  C-0001: 1200 from ${nextMonth.slice(0, 7)} (past bills unchanged)`);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Run                                                                         */
 /* -------------------------------------------------------------------------- */
@@ -372,7 +448,8 @@ async function main() {
   log("Seeding demo data into " + SUPABASE_URL);
 
   const userIds = await seedUsers();
-  const clientIds = await seedClients();
+  const areaIds = await seedAreas();
+  const clientIds = await seedClients(areaIds);
 
   const sessions: Record<string, SupabaseClient> = {
     abbu: await signInAs("abbu@watersupply.demo"),
@@ -383,6 +460,7 @@ async function main() {
   await seedBills(sessions.abbu);
   await seedPayments(sessions, clientIds);
   await seedSubmissions(sessions.abbu, userIds);
+  await seedRateChange(sessions.abbu, clientIds);
 
   log("\n" + "-".repeat(60));
   log("Demo accounts");

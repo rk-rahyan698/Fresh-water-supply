@@ -135,6 +135,12 @@ export const en = {
     empty: "No bills for this month yet.",
     editAmount: "Change bill amount",
     financialSummary: "Financial summary",
+    history: "Bill history",
+    historyDescription: "Every month billed, by year.",
+    noBillsYear: "No bills in this year.",
+    viewBill: "View bill",
+    openDetails: "Open bill details",
+    paymentsOnBill: "Payments on this bill",
     originalBill: "Original bill",
     adjustment: "Adjustment",
     adjustedBill: "Adjusted bill",
@@ -169,6 +175,49 @@ export const en = {
     explainer:
       "An adjustment reduces what the client owes. Use it for a discount or waiver - not for money the client still has to pay.",
     hint: "Reduces the amount payable. The original bill stays on record.",
+  },
+
+  area: {
+    one: "Area",
+    many: "Areas",
+    add: "Add area",
+    edit: "Edit area",
+    name: "Area name",
+    description: "Description",
+    all: "All areas",
+    unassigned: "Unassigned",
+    none: "No area",
+    clients: "Clients",
+    active: "Active",
+    inactive: "Inactive",
+    empty: "No areas yet. Add one to start grouping clients.",
+    deleteConfirm:
+      "Delete this area? Only possible while no client is assigned to it. Deactivate it instead to keep it on old records.",
+    deactivateConfirm:
+      "Deactivate this area? It stays on existing clients but is hidden when assigning new ones.",
+    saved: "Area saved",
+    deleted: "Area deleted",
+    assign: "Change area",
+    assigned: "Area updated",
+    summary: "Area Report",
+    summaryDescription: "Billing and collection for each area, for one month.",
+    hint: "Groups clients geographically. Changing it never alters past bills or payments.",
+  },
+
+  rate: {
+    change: "Change monthly bill",
+    current: "Current monthly bill",
+    newAmount: "New monthly bill",
+    effectiveFrom: "Effective from",
+    reason: "Reason",
+    history: "Rate history",
+    saved: "Monthly bill updated",
+    empty: "No scheduled rate changes.",
+    explainer:
+      "The new amount applies to bills generated from the chosen month onwards. Months already billed keep their original amount.",
+    reasonPlaceholder: "e.g. Annual revision",
+    scheduled: "Scheduled",
+    appliesFrom: "Applies from",
   },
 
   payment: {

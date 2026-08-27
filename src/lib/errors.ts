@@ -52,6 +52,13 @@ const MESSAGES: Record<string, (detail: Detail) => string> = {
   FUTURE_SUBMISSION_DATE: () => "A submission cannot be dated in the future.",
   COLLECTOR_NOT_FOUND: () => "Collector not found.",
 
+  AREA_NAME_REQUIRED: () => "Area name is required.",
+  AREA_NOT_FOUND: () => "Area not found.",
+  AREA_HAS_CLIENTS: (d) =>
+    `That area still has ${d ?? "some"} client(s). Move them elsewhere first, or just deactivate the area.`,
+  RATE_EFFECTIVE_IN_PAST: () =>
+    "A rate change can only take effect from the current month onwards - months already billed keep their amount.",
+
   CLIENT_NOT_FOUND: () => "Client not found.",
   CLIENT_INACTIVE: () => "This client is inactive. Activate them before creating a bill.",
   CLIENT_HAS_PAYMENTS: () =>

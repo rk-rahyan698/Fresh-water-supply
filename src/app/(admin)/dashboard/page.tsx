@@ -7,6 +7,7 @@ import {
   TrendingUp,
   AlertTriangle,
   Banknote,
+  Percent,
   ArrowRight,
 } from "lucide-react";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
   getMonthlySeries,
 } from "@/lib/queries/reports";
 import { listPayments } from "@/lib/queries/payments";
+import { listAreas } from "@/lib/queries/areas";
 import {
   dhakaCurrentMonth,
   formatCurrency,
@@ -39,19 +41,23 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; area?: string }>;
 }) {
-  const { month: monthParam } = await searchParams;
-  const month = monthParam ? toMonthStart(monthParam) : dhakaCurrentMonth();
+  const params = await searchParams;
+  const month = params.month ? toMonthStart(params.month) : dhakaCurrentMonth();
+  const areaId = params.area || undefined;
 
   // One round trip each, in parallel - the dashboard is the slowest screen
   // otherwise, and it is the first thing the owner opens.
-  const [summary, monthly, collectors, recent] = await Promise.all([
-    getDashboardSummary(month),
-    getMonthlySeries(6),
-    getCollectorSeries(month, monthEnd(month)),
-    listPayments({ pageSize: 6 }),
+  const [summary, monthly, collectors, recent, areas] = await Promise.all([
+    getDashboardSummary(month, areaId),
+    getMonthlySeries(6, areaId),
+    getCollectorSeries(month, monthEnd(month), areaId),
+    listPayments({ pageSize: 6, areaId }),
+    listAreas(),
   ]);
+
+  const areaName = areaId ? areas.find((a) => a.id === areaId)?.name : undefined;
 
   const monthLabel = formatMonth(month);
   const collectionRate =
@@ -63,16 +69,27 @@ export default async function AdminDashboardPage({
     <>
       <PageHeader
         title={t.dashboard.title}
-        description={`${monthLabel} · ${t.dashboard.receivedToday}: ${formatCurrency(summary.received_today)}`}
+        description={`${monthLabel}${areaName ? ` · ${areaName}` : ""} · ${t.dashboard.receivedToday}: ${formatCurrency(summary.received_today)}`}
       />
 
+      {/* One filter row scoping everything below it (sections 16, 22). */}
       <FilterBar>
         <UrlSelect
           param="month"
           value={month}
           label={t.common.month}
           options={monthOptions(18)}
-          className="w-full sm:w-56"
+          className="w-full sm:w-48"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
       </FilterBar>
 
@@ -98,6 +115,17 @@ export default async function AdminDashboardPage({
           }
           icon={ReceiptText}
           href={`/bills?month=${month}`}
+        />
+        <StatCard
+          label={t.bill.adjustment}
+          value={formatCurrency(summary.adjustment_amount)}
+          sub={
+            Number(summary.adjustment_amount) > 0
+              ? `${summary.adjusted_count} discounted ${Number(summary.adjusted_count) === 1 ? "bill" : "bills"}`
+              : "No discounts this month"
+          }
+          icon={Percent}
+          tone={Number(summary.adjustment_amount) > 0 ? "brand" : "default"}
         />
         <StatCard
           label={`${monthLabel} ${t.dashboard.monthCollected}`}

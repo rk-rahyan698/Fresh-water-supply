@@ -7,6 +7,7 @@ import { Table, TableWrap, TBody, TD, TFootRow, TH, THead, TR } from "@/componen
 import { CollectorCollectionChart } from "@/components/charts/collector-collection-chart";
 import { FilterBar, UrlSelect } from "@/components/filters/url-controls";
 import { getMonthlyReport } from "@/lib/queries/reports";
+import { listAreas } from "@/lib/queries/areas";
 import { dhakaCurrentMonth, formatCurrency, formatMonth, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
 
@@ -15,11 +16,14 @@ export const metadata: Metadata = { title: "Monthly Report" };
 export default async function MonthlyReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; area?: string }>;
 }) {
   const params = await searchParams;
   const month = params.month ? toMonthStart(params.month) : dhakaCurrentMonth();
-  const report = await getMonthlyReport(month);
+  const [areas, report] = await Promise.all([
+    listAreas(),
+    getMonthlyReport(month, params.area || undefined),
+  ]);
 
   const collectionRate =
     report.billedAmount > 0 ? Math.round((report.collectedAmount / report.billedAmount) * 100) : 0;
@@ -37,7 +41,17 @@ export default async function MonthlyReportPage({
           value={month}
           label={t.common.month}
           options={monthOptions(24)}
-          className="w-full sm:w-56"
+          className="w-full sm:w-48"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
       </FilterBar>
 

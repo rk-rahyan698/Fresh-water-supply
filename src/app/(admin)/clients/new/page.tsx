@@ -4,13 +4,14 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui/card";
 import { ClientForm } from "@/components/clients/client-form";
 import { suggestClientCode } from "@/lib/queries/clients";
+import { listAreas } from "@/lib/queries/areas";
 import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Add client" };
 
 export default async function NewClientPage() {
   // Saves the owner from inventing a code every time.
-  const suggestedCode = await suggestClientCode();
+  const [suggestedCode, areas] = await Promise.all([suggestClientCode(), listAreas(false)]);
 
   return (
     <>
@@ -22,7 +23,7 @@ export default async function NewClientPage() {
         {t.client.many}
       </Link>
       <PageHeader title={t.client.add} description="Add a client to start billing them monthly." />
-      <ClientForm suggestedCode={suggestedCode} />
+      <ClientForm suggestedCode={suggestedCode} areas={areas} />
     </>
   );
 }

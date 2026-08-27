@@ -20,6 +20,7 @@ import {
 import { FilterBar, UrlSearchInput, UrlSelect } from "@/components/filters/url-controls";
 import { AdjustmentNote } from "@/components/bills/bill-summary";
 import { getDueReport, type DueSort } from "@/lib/queries/reports";
+import { listAreas } from "@/lib/queries/areas";
 import { formatCurrency, formatMonth, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
 
@@ -41,19 +42,23 @@ const MIN_DUE_OPTIONS = [
 export default async function DueReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; q?: string; min?: string; sort?: string }>;
+  searchParams: Promise<{ month?: string; q?: string; min?: string; sort?: string; area?: string }>;
 }) {
   const params = await searchParams;
   const billingMonth = params.month ? toMonthStart(params.month) : "all";
   const sort = (params.sort as DueSort) ?? "highest";
   const minDue = params.min ? Number(params.min) : undefined;
 
-  const { rows, totalDue, count } = await getDueReport({
-    billingMonth,
-    search: params.q,
-    minDue,
-    sort,
-  });
+  const [areas, { rows, totalDue, count }] = await Promise.all([
+    listAreas(),
+    getDueReport({
+      billingMonth,
+      search: params.q,
+      areaId: params.area || undefined,
+      minDue,
+      sort,
+    }),
+  ]);
 
   const clientsAffected = new Set(rows.map((row) => row.client_id)).size;
 
@@ -68,6 +73,16 @@ export default async function DueReportPage({
           label={t.common.month}
           options={[{ value: "", label: `${t.common.all} months` }, ...monthOptions(18)]}
           className="w-full sm:w-44"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
         <UrlSelect
           param="min"

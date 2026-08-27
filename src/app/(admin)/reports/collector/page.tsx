@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "Collector Report" };
 export default async function CollectorReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collector?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ collector?: string; from?: string; to?: string; area?: string }>;
 }) {
   const params = await searchParams;
   const collectors = await listCollectors();

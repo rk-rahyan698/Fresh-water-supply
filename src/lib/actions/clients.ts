@@ -12,6 +12,8 @@ type State = ActionResult<{ id: string }> | null;
 
 function revalidateClients(id?: string) {
   revalidatePath("/clients");
+  revalidatePath("/areas");
+  revalidatePath("/reports/area");
   revalidatePath("/dashboard");
   revalidatePath("/my/clients");
   if (id) {
@@ -30,6 +32,7 @@ export async function saveClientAction(_prev: State, formData: FormData): Promis
     phone: formData.get("phone") ?? "",
     address: formData.get("address") ?? "",
     monthly_bill: formData.get("monthly_bill"),
+    area_id: (formData.get("area_id") as string) || null,
     start_date: formData.get("start_date"),
     status: formData.get("status") ?? "active",
     notes: formData.get("notes") ?? "",
@@ -53,6 +56,7 @@ export async function saveClientAction(_prev: State, formData: FormData): Promis
     p_start_date: values.start_date,
     p_status: values.status,
     p_notes: values.notes ?? null,
+    p_area_id: values.area_id ?? null,
   });
 
   if (error) return actionError(error);

@@ -23,6 +23,7 @@ export const clientSchema = z.object({
     .optional(),
   address: optionalText(300),
   monthly_bill: moneyAmountOrZero,
+  area_id: uuid.nullable().optional(),
   start_date: dateString,
   status: z.enum(["active", "inactive"]),
   notes: optionalText(1000),

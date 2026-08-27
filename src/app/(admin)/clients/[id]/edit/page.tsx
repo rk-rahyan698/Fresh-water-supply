@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui/card";
 import { ClientForm } from "@/components/clients/client-form";
 import { getClient } from "@/lib/queries/clients";
+import { listAreas } from "@/lib/queries/areas";
 import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Edit client" };
@@ -15,7 +16,7 @@ export default async function EditClientPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const client = await getClient(id);
+  const [client, areas] = await Promise.all([getClient(id), listAreas(false)]);
   if (!client) notFound();
 
   return (
@@ -31,7 +32,7 @@ export default async function EditClientPage({
         title={t.client.edit}
         description="Changing the monthly bill affects future bills only - bills already generated keep their amount."
       />
-      <ClientForm client={client} />
+      <ClientForm client={client} areas={areas} />
     </>
   );
 }

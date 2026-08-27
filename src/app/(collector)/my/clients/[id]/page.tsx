@@ -57,7 +57,11 @@ export default async function CollectorClientDetailPage({
       </Link>
 
       <div className="space-y-3">
-        <ClientSummaryCard client={client} outstanding={outstanding} />
+        <ClientSummaryCard
+          client={client}
+          outstanding={outstanding}
+          areaName={client.areas?.name}
+        />
 
         <CurrentBillCard
           client={client}

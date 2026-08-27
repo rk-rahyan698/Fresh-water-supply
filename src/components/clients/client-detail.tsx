@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone, MapPin, Calendar, Hash } from "lucide-react";
+import { Phone, MapPin, Calendar, Hash, Map as MapIcon } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { BillStatusBadge, ClientStatusBadge, PaymentMethodBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,10 +21,13 @@ export function ClientSummaryCard({
   client,
   outstanding,
   actions,
+  areaName,
 }: {
   client: Client;
   outstanding: number;
   actions?: React.ReactNode;
+  /** Area label for the profile header (spec sections 3, 25). */
+  areaName?: string | null;
 }) {
   return (
     <Card>
@@ -66,6 +69,11 @@ export function ClientSummaryCard({
             icon={Phone}
           />
           <Detail label={t.client.startDate} value={formatDate(client.start_date)} icon={Calendar} />
+          <Detail
+            label={t.area.one}
+            value={areaName ?? <span className="text-ink-faint">{t.area.none}</span>}
+            icon={MapIcon}
+          />
           {client.address && (
             <Detail
               label={t.client.address}

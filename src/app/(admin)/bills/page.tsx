@@ -20,6 +20,7 @@ import {
 import { GenerateBillsButton } from "@/components/bills/generate-bills-button";
 import { FilterBar, UrlSearchInput, UrlSelect } from "@/components/filters/url-controls";
 import { listBills } from "@/lib/queries/payments";
+import { listAreas } from "@/lib/queries/areas";
 import { dhakaCurrentMonth, formatCurrency, formatMonth, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { BillStatus } from "@/types/database";
@@ -36,7 +37,7 @@ const STATUS_OPTIONS = [
 export default async function BillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; status?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ month?: string; status?: string; q?: string; area?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const month = params.month ? toMonthStart(params.month) : dhakaCurrentMonth();
@@ -44,12 +45,10 @@ export default async function BillsPage({
   const search = params.q ?? "";
   const page = Number(params.page ?? 1);
 
-  const { bills, total, pageCount, totals } = await listBills({
-    billingMonth: month,
-    status,
-    search,
-    page,
-  });
+  const [areas, { bills, total, pageCount, totals }] = await Promise.all([
+    listAreas(),
+    listBills({ billingMonth: month, status, search, areaId: params.area || undefined, page }),
+  ]);
 
   return (
     <>
@@ -73,6 +72,16 @@ export default async function BillsPage({
           label={t.bill.status}
           options={STATUS_OPTIONS}
           className="w-32"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
         <UrlSearchInput
           initialValue={search}

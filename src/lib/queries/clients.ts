@@ -1,7 +1,16 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Client, ClientStatus, MonthlyBill, Payment, Profile } from "@/types/database";
+import { dhakaCurrentMonth } from "@/lib/format";
+import type {
+  BillStatus,
+  Client,
+  ClientStatus,
+  ClientWithArea,
+  MonthlyBill,
+  Payment,
+  Profile,
+} from "@/types/database";
 
 export const PAGE_SIZE = 25;
 
@@ -13,6 +22,7 @@ export function escapeLike(term: string): string {
 export interface ClientListParams {
   search?: string;
   status?: ClientStatus | "all";
+  areaId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -39,6 +49,9 @@ export async function listClients(params: ClientListParams = {}): Promise<Client
   if (params.status && params.status !== "all") {
     query = query.eq("status", params.status);
   }
+  if (params.areaId) {
+    query = query.eq("area_id", params.areaId);
+  }
 
   const search = params.search?.trim();
   if (search) {
@@ -58,9 +71,14 @@ export async function listClients(params: ClientListParams = {}): Promise<Client
   };
 }
 
-export async function getClient(id: string): Promise<Client | null> {
+export async function getClient(id: string): Promise<ClientWithArea | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*, areas(id, name)")
+    .eq("id", id)
+    .maybeSingle()
+    .overrideTypes<ClientWithArea, { merge: false }>();
   if (error) throw error;
   return data;
 }
@@ -160,4 +178,178 @@ export async function suggestClientCode(): Promise<string> {
   const lastNumber = last ? Number(last.replace(/^C-/, "")) : 0;
   const next = Number.isFinite(lastNumber) ? lastNumber + 1 : 1;
   return `C-${String(next).padStart(4, "0")}`;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Client list with this month's figures (spec section 24)                     */
+/* -------------------------------------------------------------------------- */
+
+export interface ClientOverviewRow {
+  clientId: string;
+  clientCode: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  areaId: string | null;
+  areaName: string | null;
+  monthlyBill: number;
+  clientStatus: ClientStatus;
+  billId: string | null;
+  billAmount: number | null;
+  adjustmentAmount: number | null;
+  adjustedAmount: number | null;
+  paidAmount: number | null;
+  dueAmount: number | null;
+  billStatus: BillStatus | null;
+}
+
+export interface ClientOverviewResult {
+  rows: ClientOverviewRow[];
+  total: number;
+  page: number;
+  pageCount: number;
+}
+
+/**
+ * Clients plus their bill for one month, in a single round trip.
+ *
+ * Doing this as one RPC rather than "list clients, then fetch each bill" is
+ * what keeps the page flat as the client count grows.
+ */
+export async function listClientOverview(params: {
+  month?: string;
+  areaId?: string;
+  search?: string;
+  status?: ClientStatus | "all";
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<ClientOverviewResult> {
+  const supabase = await createClient();
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = params.pageSize ?? PAGE_SIZE;
+
+  const { data, error } = await supabase.rpc("client_month_overview", {
+    p_month: params.month ?? dhakaCurrentMonth(),
+    p_area_id: params.areaId ?? null,
+    p_search: params.search?.trim() || null,
+    p_status: params.status && params.status !== "all" ? params.status : null,
+    p_limit: pageSize,
+    p_offset: (page - 1) * pageSize,
+  });
+  if (error) throw error;
+
+  const rows = (data ?? []).map((row) => ({
+    clientId: row.client_id,
+    clientCode: row.client_code,
+    name: row.name,
+    phone: row.phone,
+    address: row.address,
+    areaId: row.area_id,
+    areaName: row.area_name,
+    monthlyBill: Number(row.monthly_bill),
+    clientStatus: row.client_status,
+    billId: row.bill_id,
+    billAmount: row.bill_amount === null ? null : Number(row.bill_amount),
+    adjustmentAmount: row.adjustment_amount === null ? null : Number(row.adjustment_amount),
+    adjustedAmount: row.adjusted_amount === null ? null : Number(row.adjusted_amount),
+    paidAmount: row.paid_amount === null ? null : Number(row.paid_amount),
+    dueAmount: row.due_amount === null ? null : Number(row.due_amount),
+    billStatus: row.bill_status,
+  }));
+
+  // total_count is a window function over the unpaginated set.
+  const total = data && data.length > 0 ? Number(data[0].total_count) : 0;
+
+  return { rows, total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Long-term bill history (spec sections 6-11)                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface BillMatrixCell {
+  billId: string;
+  billingMonth: string;
+  year: number;
+  month: number;
+  billAmount: number;
+  adjustmentAmount: number;
+  adjustedAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  status: BillStatus;
+  adjustmentType: string | null;
+  adjustmentReason: string | null;
+  paymentCount: number;
+}
+
+/** Years this client has bills for, newest first - powers the year selector. */
+export async function getClientBillYears(clientId: string): Promise<number[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("client_bill_years", { p_client_id: clientId });
+  if (error) throw error;
+  return (data ?? []).map((row) => Number(row.bill_year));
+}
+
+/**
+ * Bills for a bounded year range, flat. The UI pivots it into Year x Month.
+ * Bounded so a client with a decade of history never ships it all at once.
+ */
+export async function getClientBillMatrix(
+  clientId: string,
+  fromYear: number,
+  toYear: number,
+): Promise<BillMatrixCell[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("client_bill_matrix", {
+    p_client_id: clientId,
+    p_from_year: fromYear,
+    p_to_year: toYear,
+  });
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    billId: row.bill_id,
+    billingMonth: row.billing_month,
+    year: Number(row.bill_year),
+    month: Number(row.bill_month),
+    billAmount: Number(row.bill_amount),
+    adjustmentAmount: Number(row.adjustment_amount),
+    adjustedAmount: Number(row.adjusted_amount),
+    paidAmount: Number(row.paid_amount),
+    dueAmount: Number(row.due_amount),
+    status: row.status,
+    adjustmentType: row.adjustment_type,
+    adjustmentReason: row.adjustment_reason,
+    paymentCount: Number(row.payment_count),
+  }));
+}
+
+/** Scheduled rate changes for a client, newest first (admin only via RLS). */
+export async function getClientRateHistory(clientId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("client_rate_history")
+    .select("*, changed_by_profile:profiles!client_rate_history_changed_by_fkey(full_name)")
+    .eq("client_id", clientId)
+    .order("effective_from", { ascending: false })
+    .limit(24);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Payments made against one specific bill - used by the bill detail dialog. */
+export async function getBillPayments(billId: string): Promise<ClientPayment[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select(
+      "*, collector:profiles!payments_collected_by_fkey(id, full_name), monthly_bills(billing_month)",
+    )
+    .eq("monthly_bill_id", billId)
+    .order("created_at", { ascending: true })
+    .overrideTypes<ClientPayment[], { merge: false }>();
+  if (error) throw error;
+  return data ?? [];
 }

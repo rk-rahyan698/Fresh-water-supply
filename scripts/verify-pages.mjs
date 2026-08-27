@@ -109,10 +109,12 @@ async function main() {
   await check("admin", `/clients/${client.id}`, adminCookie, client.name);
   await check("admin", `/clients/${client.id}/edit`, adminCookie, "Edit client");
   await check("admin", "/clients/new", adminCookie, "Add client");
+  await check("admin", "/areas", adminCookie, "Areas");
   await check("admin", "/bills", adminCookie, "Bills");
   await check("admin", "/collections", adminCookie, "Collections");
   await check("admin", "/submissions", adminCookie, "Cash submission");
   await check("admin", "/reports/due", adminCookie, "Due Report");
+  await check("admin", "/reports/area", adminCookie, "Area Report");
   await check("admin", "/reports/collector", adminCookie, "Collector Report");
   await check("admin", "/reports/monthly", adminCookie, "Monthly Report");
   await check("admin", "/reports/daily", adminCookie, "Daily Collection");
@@ -127,6 +129,12 @@ async function main() {
   await check("collector", "/my/collections", collectorCookie, "My Collections");
   await check("collector", "/my/submissions", collectorCookie, "My Submissions");
   await check("collector", "/my/profile", collectorCookie, "Profile");
+
+  console.log("\n== NEW FILTERS AND VIEWS ==");
+  await check("admin", `/clients/${client.id}?year=${new Date().getFullYear()}`, adminCookie, client.name);
+  await check("admin", "/clients?area=none", adminCookie, "Clients");
+  await check("admin", "/dashboard?area=", adminCookie, "Dashboard");
+  await check("collector", "/my/clients?area=", collectorCookie, "Clients");
 
   console.log("\n== ROLE SEPARATION ==");
   const res = await fetch(`${BASE}/dashboard`, { headers: { cookie: collectorCookie }, redirect: "manual" });

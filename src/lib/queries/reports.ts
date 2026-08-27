@@ -14,10 +14,14 @@ import type {
 /* Dashboard                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export async function getDashboardSummary(month?: string): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  month?: string,
+  areaId?: string,
+): Promise<DashboardSummary> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("dashboard_summary", {
     p_month: month ?? dhakaCurrentMonth(),
+    p_area_id: areaId ?? null,
   });
   if (error) throw error;
   // The RPC returns jsonb; this is the single place that shape is asserted.
@@ -34,9 +38,15 @@ export interface MonthlySeriesPoint {
   due_amount: number;
 }
 
-export async function getMonthlySeries(months = 6): Promise<MonthlySeriesPoint[]> {
+export async function getMonthlySeries(
+  months = 6,
+  areaId?: string,
+): Promise<MonthlySeriesPoint[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("monthly_series", { p_months: months });
+  const { data, error } = await supabase.rpc("monthly_series", {
+    p_months: months,
+    p_area_id: areaId ?? null,
+  });
   if (error) throw error;
   return (data ?? []).map((row) => ({
     billing_month: row.billing_month,
@@ -56,11 +66,16 @@ export interface CollectorSeriesPoint {
   cash_amount: number;
 }
 
-export async function getCollectorSeries(from?: string, to?: string): Promise<CollectorSeriesPoint[]> {
+export async function getCollectorSeries(
+  from?: string,
+  to?: string,
+  areaId?: string,
+): Promise<CollectorSeriesPoint[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("collector_series", {
     p_from: from ?? dhakaCurrentMonth(),
     p_to: to ?? dhakaToday(),
+    p_area_id: areaId ?? null,
   });
   if (error) throw error;
   return (data ?? []).map((row) => ({
@@ -140,9 +155,15 @@ export interface DailyCollectionRow {
   total_amount: number;
 }
 
-export async function getDailyCollection(date: string): Promise<DailyCollectionRow[]> {
+export async function getDailyCollection(
+  date: string,
+  areaId?: string,
+): Promise<DailyCollectionRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("daily_collection_report", { p_date: date });
+  const { data, error } = await supabase.rpc("daily_collection_report", {
+    p_date: date,
+    p_area_id: areaId ?? null,
+  });
   if (error) throw error;
   return (data ?? []).map((row) => ({
     collector_id: row.collector_id,
@@ -161,6 +182,7 @@ export type DueSort = "highest" | "oldest";
 export interface DueReportFilters {
   billingMonth?: string | "all";
   search?: string;
+  areaId?: string;
   minDue?: number;
   sort?: DueSort;
   limit?: number;
@@ -178,9 +200,13 @@ export async function getDueReport(filters: DueReportFilters = {}): Promise<DueR
 
   let query = supabase
     .from("monthly_bills")
-    .select("*, clients!inner(id, name, client_code, phone, address)")
+    .select("*, clients!inner(id, name, client_code, phone, address, area_id, areas(name))")
     .gt("due_amount", 0)
     .limit(filters.limit ?? 500);
+
+  if (filters.areaId) {
+    query = query.eq("clients.area_id", filters.areaId);
+  }
 
   if (filters.billingMonth && filters.billingMonth !== "all") {
     query = query.eq("billing_month", filters.billingMonth);
@@ -233,10 +259,13 @@ export interface MonthlyReport {
   collectors: CollectorSeriesPoint[];
 }
 
-export async function getMonthlyReport(billingMonth: string): Promise<MonthlyReport> {
+export async function getMonthlyReport(
+  billingMonth: string,
+  areaId?: string,
+): Promise<MonthlyReport> {
   const [summary, collectors] = await Promise.all([
-    getDashboardSummary(billingMonth),
-    getCollectorSeries(billingMonth, monthEnd(billingMonth)),
+    getDashboardSummary(billingMonth, areaId),
+    getCollectorSeries(billingMonth, monthEnd(billingMonth), areaId),
   ]);
 
   return {

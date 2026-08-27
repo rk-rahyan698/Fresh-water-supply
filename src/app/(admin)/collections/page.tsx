@@ -9,6 +9,7 @@ import {
 } from "@/components/filters/url-controls";
 import { listPayments } from "@/lib/queries/payments";
 import { listCollectors } from "@/lib/queries/reports";
+import { listAreas } from "@/lib/queries/areas";
 import { dhakaToday, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { PaymentMethod } from "@/types/database";
@@ -33,6 +34,7 @@ export default async function CollectionsPage({
     collector?: string;
     method?: string;
     q?: string;
+    area?: string;
     page?: string;
     voided?: string;
   }>;
@@ -41,7 +43,7 @@ export default async function CollectionsPage({
   const page = Number(params.page ?? 1);
   const includeVoided = params.voided === "1";
 
-  const collectors = await listCollectors();
+  const [collectors, areas] = await Promise.all([listCollectors(), listAreas()]);
 
   const { payments, total, pageCount, sum } = await listPayments({
     from: params.from,
@@ -49,6 +51,7 @@ export default async function CollectionsPage({
     billingMonth: params.month ? toMonthStart(params.month) : undefined,
     collectorId: params.collector || undefined,
     method: (params.method as PaymentMethod) || undefined,
+    areaId: params.area || undefined,
     search: params.q,
     includeVoided,
     page,
@@ -83,6 +86,16 @@ export default async function CollectionsPage({
             })),
           ]}
           className="w-full sm:w-44"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
         <UrlSelect
           param="method"

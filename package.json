@@ -11,7 +11,9 @@
     "seed": "node --env-file-if-exists=.env.local scripts/seed.mts",
     "verify:db": "node scripts/verify-db.mjs",
     "verify:migration": "node scripts/verify-migration-0004.mjs",
-    "verify:pages": "node --env-file-if-exists=.env.local scripts/verify-pages.mjs"
+    "verify:pages": "node --env-file-if-exists=.env.local scripts/verify-pages.mjs",
+    "verify:analytics": "node scripts/verify-migration-0006.mjs",
+    "verify:all": "npm run verify:db && npm run verify:migration && npm run verify:analytics"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

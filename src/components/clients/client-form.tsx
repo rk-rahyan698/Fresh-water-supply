@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { saveClientAction } from "@/lib/actions/clients";
 import { dhakaToday, formatCurrency } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { Client } from "@/types/database";
+import type { Area, Client } from "@/types/database";
 
 /** Mirrors clientSchema, minus the transforms - RHF works with raw strings. */
 const formSchema = z.object({
@@ -38,6 +38,7 @@ const formSchema = z.object({
       return Number.isFinite(n) && n >= 0;
     }, "Enter a valid amount"),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date"),
+  area_id: z.string(),
   status: z.enum(["active", "inactive"]),
   notes: z.string().trim().max(1000, "Note is too long"),
 });
@@ -52,10 +53,13 @@ const STATUS_OPTIONS = [
 export function ClientForm({
   client,
   suggestedCode,
+  areas = [],
 }: {
   client?: Client;
   /** Pre-filled next code when creating, e.g. C-0007. */
   suggestedCode?: string;
+  /** Active areas to choose from (spec section 19). */
+  areas?: Pick<Area, "id" | "name">[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -78,6 +82,7 @@ export function ClientForm({
       address: client?.address ?? "",
       monthly_bill: client ? String(client.monthly_bill) : "",
       start_date: client?.start_date ?? dhakaToday(),
+      area_id: client?.area_id ?? "",
       status: client?.status ?? "active",
       notes: client?.notes ?? "",
     },
@@ -97,6 +102,7 @@ export function ClientForm({
     formData.set("address", values.address);
     formData.set("monthly_bill", values.monthly_bill);
     formData.set("start_date", values.start_date);
+    formData.set("area_id", values.area_id);
     formData.set("status", values.status);
     formData.set("notes", values.notes);
 
@@ -181,6 +187,16 @@ export function ClientForm({
             }
             error={errors.monthly_bill?.message}
             {...register("monthly_bill")}
+          />
+          <Select
+            label={t.area.one}
+            options={[
+              { value: "", label: t.area.none },
+              ...areas.map((a) => ({ value: a.id, label: a.name })),
+            ]}
+            help={t.area.hint}
+            error={errors.area_id?.message}
+            {...register("area_id")}
           />
           <Select
             label={t.client.status}

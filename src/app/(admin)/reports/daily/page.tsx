@@ -5,9 +5,10 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, TBody, TD, TFootRow, TH, THead, TR } from "@/components/ui/table";
 import { PaymentsTable } from "@/components/payments/payments-table";
-import { FilterBar, UrlDateInput } from "@/components/filters/url-controls";
+import { FilterBar, UrlDateInput, UrlSelect } from "@/components/filters/url-controls";
 import { getDailyCollection } from "@/lib/queries/reports";
 import { listPayments } from "@/lib/queries/payments";
+import { listAreas } from "@/lib/queries/areas";
 import { dhakaToday, formatCurrency, formatDateLong } from "@/lib/format";
 import { t } from "@/lib/i18n";
 
@@ -16,15 +17,17 @@ export const metadata: Metadata = { title: "Daily Collection" };
 export default async function DailyReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; page?: string }>;
+  searchParams: Promise<{ date?: string; area?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const date = params.date || dhakaToday();
   const page = Number(params.page ?? 1);
 
-  const [rows, payments] = await Promise.all([
-    getDailyCollection(date),
-    listPayments({ from: date, to: date, page, pageSize: 50 }),
+  const areaId = params.area || undefined;
+  const [rows, payments, areas] = await Promise.all([
+    getDailyCollection(date, areaId),
+    listPayments({ from: date, to: date, areaId, page, pageSize: 50 }),
+    listAreas(),
   ]);
 
   const total = rows.reduce((sum, row) => sum + row.total_amount, 0);
@@ -41,6 +44,16 @@ export default async function DailyReportPage({
           label={t.common.date}
           max={dhakaToday()}
           className="w-full sm:w-48"
+        />
+        <UrlSelect
+          param="area"
+          value={params.area ?? ""}
+          label={t.area.one}
+          options={[
+            { value: "", label: t.area.all },
+            ...areas.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          className="w-full sm:w-40"
         />
       </FilterBar>
 

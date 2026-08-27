@@ -23,6 +23,7 @@ At any moment the owner can answer:
 - [Demo data](#demo-data)
 - [How the money works](#how-the-money-works)
 - [Discounts vs. underpayment](#discounts-vs-underpayment)
+- [Areas and rate changes](#areas-and-rate-changes)
 - [Financial integrity](#financial-integrity)
 - [Security model](#security-model)
 - [Screens](#screens)
@@ -70,6 +71,8 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0002_functions.sql` | Every money-moving operation, as SQL functions |
 | `0003_rls_policies.sql` | Row Level Security policies and grants |
 | `0004_bill_adjustments.sql` | Discounts / waivers, and adjustment-aware due + status |
+| `0005_areas_and_rates.sql` | Areas, client area assignment, scheduled rate changes |
+| `0006_analytics.sql` | Year x month bill matrix, area summary, area-filtered aggregates |
 
 They are written to be safe to re-run.
 
@@ -302,6 +305,40 @@ opens the screen. So the test logs in and looks.
 
 ---
 
+## Areas and rate changes
+
+**Areas** group clients geographically. The area lives on the *client*, never on
+a bill or payment, so moving someone between areas changes where they are
+counted from now on and rewrites nothing historical. Clients with no area are
+reported as **Unassigned** rather than dropped, so area totals always add up to
+the business totals.
+
+Every list and report takes an area filter, and they combine - *August 2026 +
+Area 1 + Mama* answers "what did Mama collect in Area 1 last month".
+
+**Rate changes.** A client's `monthly_bill` is the rate in force today. Bill
+generation copies it into `monthly_bills.bill_amount`, and an existing bill is
+never rewritten, so changing the rate has only ever affected future bills.
+
+`client_rate_history` adds what that could not do: scheduling. *"৳1,200 from
+September"* is recorded with a reason, and generation asks for the rate
+effective for the month it is billing:
+
+```
+January–March  ৳1,000   (already billed - untouched)
+April onwards  ৳1,200   (scheduled, effective April)
+```
+
+A rate can never be back-dated into a month that is already billed - the SQL
+function rejects it.
+
+**Long-term history.** A client's bills are shown as a Year x Month matrix,
+years as columns and months as rows. Only a bounded year window is ever
+queried, and a cell's payments load when the cell is opened - so a client with
+ten years of history stays as fast as one with three months.
+
+---
+
 ## Security model
 
 Three independent layers — the app never relies on the frontend alone:
@@ -411,6 +448,8 @@ trust.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run verify:db` | Run migrations + 57 assertions in PGlite |
 | `npm run verify:migration` | Apply 0004 to a *populated* schema and check nothing breaks |
+| `npm run verify:analytics` | Areas, rate history, bill matrix and area reporting |
+| `npm run verify:all` | All three database suites in sequence |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run seed` | Demo data (reads `.env.local`) |
 

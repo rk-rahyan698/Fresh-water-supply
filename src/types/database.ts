@@ -49,6 +49,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      areas: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { id?: string; name: string; description?: string | null; is_active?: boolean };
+        Update: { name?: string; description?: string | null; is_active?: boolean };
+        Relationships: [];
+      };
+      client_rate_history: {
+        Row: {
+          id: string;
+          client_id: string;
+          monthly_bill: number;
+          effective_from: string;
+          reason: string | null;
+          changed_by: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "client_rate_history_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_rate_history_changed_by_fkey";
+            columns: ["changed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       clients: {
         Row: {
           id: string;
@@ -60,6 +102,7 @@ export interface Database {
           start_date: string;
           status: ClientStatus;
           notes: string | null;
+          area_id: string | null;
           created_at: string;
           updated_at: string;
           search_text: string;
@@ -74,6 +117,7 @@ export interface Database {
           start_date?: string;
           status?: ClientStatus;
           notes?: string | null;
+          area_id?: string | null;
         };
         Update: {
           client_code?: string;
@@ -84,8 +128,17 @@ export interface Database {
           start_date?: string;
           status?: ClientStatus;
           notes?: string | null;
+          area_id?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "clients_area_id_fkey";
+            columns: ["area_id"];
+            isOneToOne: false;
+            referencedRelation: "areas";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       monthly_bills: {
         Row: {
@@ -293,11 +346,11 @@ export interface Database {
         Returns: Json;
       };
       dashboard_summary: {
-        Args: { p_month?: string | null };
+        Args: { p_month?: string | null; p_area_id?: string | null };
         Returns: Json;
       };
       monthly_series: {
-        Args: { p_months?: number };
+        Args: { p_months?: number; p_area_id?: string | null };
         Returns: {
           billing_month: string;
           original_amount: number;
@@ -309,7 +362,7 @@ export interface Database {
         }[];
       };
       collector_series: {
-        Args: { p_from?: string | null; p_to?: string | null };
+        Args: { p_from?: string | null; p_to?: string | null; p_area_id?: string | null };
         Returns: {
           collector_id: string;
           collector_name: string;
@@ -319,7 +372,7 @@ export interface Database {
         }[];
       };
       daily_collection_report: {
-        Args: { p_date?: string | null };
+        Args: { p_date?: string | null; p_area_id?: string | null };
         Returns: {
           collector_id: string;
           collector_name: string;
@@ -360,6 +413,7 @@ export interface Database {
           p_start_date: string | null;
           p_status: ClientStatus;
           p_notes: string | null;
+          p_area_id?: string | null;
         };
         Returns: Database["public"]["Tables"]["clients"]["Row"];
       };
@@ -370,6 +424,101 @@ export interface Database {
       delete_client: {
         Args: { p_client_id: string };
         Returns: undefined;
+      };
+      upsert_area: {
+        Args: {
+          p_id: string | null;
+          p_name: string;
+          p_description?: string | null;
+          p_is_active?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["areas"]["Row"];
+      };
+      delete_area: { Args: { p_area_id: string }; Returns: undefined };
+      set_client_area: {
+        Args: { p_client_id: string; p_area_id: string | null };
+        Returns: Database["public"]["Tables"]["clients"]["Row"];
+      };
+      set_client_rate: {
+        Args: {
+          p_client_id: string;
+          p_monthly_bill: number;
+          p_effective_from: string;
+          p_reason?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["client_rate_history"]["Row"];
+      };
+      client_rate_for_month: {
+        Args: { p_client_id: string; p_billing_month: string };
+        Returns: number;
+      };
+      client_bill_years: {
+        Args: { p_client_id: string };
+        Returns: { bill_year: number; bill_count: number }[];
+      };
+      client_bill_matrix: {
+        Args: { p_client_id: string; p_from_year?: number | null; p_to_year?: number | null };
+        Returns: {
+          bill_id: string;
+          billing_month: string;
+          bill_year: number;
+          bill_month: number;
+          bill_amount: number;
+          adjustment_amount: number;
+          adjusted_amount: number;
+          paid_amount: number;
+          due_amount: number;
+          status: BillStatus;
+          adjustment_type: AdjustmentType | null;
+          adjustment_reason: string | null;
+          payment_count: number;
+        }[];
+      };
+      area_summary: {
+        Args: { p_month?: string | null };
+        Returns: {
+          area_id: string | null;
+          area_name: string;
+          is_active: boolean;
+          client_count: number;
+          original_amount: number;
+          adjustment_amount: number;
+          adjusted_amount: number;
+          collected_amount: number;
+          due_amount: number;
+          paid_count: number;
+          partial_count: number;
+          unpaid_count: number;
+        }[];
+      };
+      client_month_overview: {
+        Args: {
+          p_month?: string | null;
+          p_area_id?: string | null;
+          p_search?: string | null;
+          p_status?: ClientStatus | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          client_id: string;
+          client_code: string;
+          name: string;
+          phone: string | null;
+          address: string | null;
+          area_id: string | null;
+          area_name: string | null;
+          monthly_bill: number;
+          client_status: ClientStatus;
+          bill_id: string | null;
+          bill_amount: number | null;
+          adjustment_amount: number | null;
+          adjusted_amount: number | null;
+          paid_amount: number | null;
+          due_amount: number | null;
+          bill_status: BillStatus | null;
+          total_count: number;
+        }[];
       };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_active_user: { Args: Record<string, never>; Returns: boolean };
@@ -395,15 +544,26 @@ export interface Database {
 type Tables = Database["public"]["Tables"];
 
 export type Profile = Tables["profiles"]["Row"];
+export type Area = Tables["areas"]["Row"];
+export type ClientRate = Tables["client_rate_history"]["Row"];
 export type Client = Tables["clients"]["Row"];
 export type MonthlyBill = Tables["monthly_bills"]["Row"];
 export type Payment = Tables["payments"]["Row"];
 export type CashSubmission = Tables["cash_submissions"]["Row"];
 export type AuditLog = Tables["audit_logs"]["Row"];
 
+/** A client joined with its area. */
+export type ClientWithArea = Client & {
+  areas: Pick<Area, "id" | "name"> | null;
+};
+
 /** A bill joined with the client it belongs to. */
 export type BillWithClient = MonthlyBill & {
-  clients: Pick<Client, "id" | "name" | "client_code" | "phone" | "address"> | null;
+  clients:
+    | (Pick<Client, "id" | "name" | "client_code" | "phone" | "address" | "area_id"> & {
+        areas: { name: string } | null;
+      })
+    | null;
 };
 
 /** A payment joined with everything the collections table needs to show. */

@@ -66,7 +66,15 @@ export default async function DueReportPage({
     <>
       <PageHeader title={t.report.due} description={t.report.dueDescription} />
 
-      <FilterBar>
+      <FilterBar
+        alwaysVisible={
+          <UrlSearchInput
+            initialValue={params.q ?? ""}
+            placeholder={t.client.searchPlaceholder}
+            className="min-w-0 flex-1"
+          />
+        }
+      >
         <UrlSelect
           param="month"
           value={billingMonth === "all" ? "" : billingMonth}
@@ -98,14 +106,9 @@ export default async function DueReportPage({
           options={SORT_OPTIONS}
           className="w-full sm:w-44"
         />
-        <UrlSearchInput
-          initialValue={params.q ?? ""}
-          placeholder={t.client.searchPlaceholder}
-          className="min-w-0 flex-1"
-        />
       </FilterBar>
 
-      <div className="mb-3 grid grid-cols-3 gap-2.5">
+      <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard label={t.report.totalDue} value={formatCurrency(totalDue)} tone="danger" />
         <StatCard label="Unpaid bills" value={count} />
         <StatCard label="Clients" value={clientsAffected} />

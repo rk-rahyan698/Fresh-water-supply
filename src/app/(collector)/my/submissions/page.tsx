@@ -27,7 +27,7 @@ export default async function MySubmissionsPage() {
         description="Cash you have handed over to the owner."
       />
 
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard
           label={`${t.payment.cash} ${t.submission.collected.toLowerCase()}`}
           value={formatCurrency(stats.cash_collection)}

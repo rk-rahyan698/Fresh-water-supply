@@ -45,14 +45,21 @@ export function StatCard({
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-ink-soft">{label}</p>
+        <p className="text-xs font-medium text-ink-soft sm:text-sm">{label}</p>
         {Icon && (
           <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", TONE_ICON[tone])}>
             <Icon className="size-4" />
           </span>
         )}
       </div>
-      <p className={cn("tnum mt-2 text-2xl font-semibold tracking-tight", TONE_VALUE[tone])}>
+      <p
+        className={cn(
+          // Slightly smaller on a phone: three cards in a row leave little
+          // width, and a wrapped amount reads worse than a smaller one.
+          "tnum mt-2 text-xl font-semibold tracking-tight sm:text-2xl",
+          TONE_VALUE[tone],
+        )}
+      >
         {value}
       </p>
       {sub && <p className="mt-1 text-xs text-ink-faint">{sub}</p>}

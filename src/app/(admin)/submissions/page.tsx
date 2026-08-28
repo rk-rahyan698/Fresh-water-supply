@@ -67,7 +67,7 @@ export default async function SubmissionsPage() {
         action={<SubmissionDialog collectors={balances} />}
       />
 
-      <div className="mb-3 grid grid-cols-3 gap-2.5">
+      <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard label={t.submission.collected} value={formatCurrency(totals.collected)} icon={Wallet} />
         <StatCard
           label={t.submission.submitted}

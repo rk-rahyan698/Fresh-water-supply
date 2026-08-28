@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Children, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/spinner";
 import { t } from "@/lib/i18n";
@@ -188,22 +188,68 @@ export function UrlSearchInput({
   );
 }
 
-/** One filter row above the content it scopes. */
+/**
+ * One filter row above the content it scopes.
+ *
+ * On a phone every control is full width, so a page with six or more of them
+ * would push the actual data below the fold. Past two controls the extras
+ * collapse behind a "Filters" toggle on small screens and stay inline from
+ * `sm` up, where there is room for a real row.
+ *
+ * `alwaysVisible` is for the one control that must never be hidden - the
+ * search box, which is how a collector finds anybody.
+ */
 export function FilterBar({
   children,
+  alwaysVisible,
   className,
 }: {
   children: React.ReactNode;
+  alwaysVisible?: React.ReactNode;
   className?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const count = Children.count(children);
+  const collapsible = count > 2;
+
   return (
     <div
       className={cn(
-        "mb-4 flex flex-wrap items-end gap-2.5 rounded-2xl border border-line bg-surface px-3 py-3 shadow-sm sm:px-4",
+        "mb-4 rounded-2xl border border-line bg-surface px-3 py-3 shadow-sm sm:px-4",
         className,
       )}
     >
-      {children}
+      {alwaysVisible && <div className="mb-2.5 sm:mb-0 sm:hidden">{alwaysVisible}</div>}
+
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-line px-3 text-sm font-medium text-ink sm:hidden"
+        >
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal className="size-4 text-ink-soft" />
+            {t.common.filter}
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700">
+              {count}
+            </span>
+          </span>
+          <ChevronDown className={cn("size-4 text-ink-soft transition-transform", open && "rotate-180")} />
+        </button>
+      )}
+
+      <div
+        className={cn(
+          "flex-wrap items-end gap-2.5",
+          // Inline from sm up; on mobile only shown when expanded (or when
+          // there are few enough controls not to need collapsing).
+          collapsible ? (open ? "mt-2.5 flex sm:mt-0" : "hidden sm:flex") : "flex",
+        )}
+      >
+        {alwaysVisible && <div className="hidden min-w-0 flex-1 sm:block">{alwaysVisible}</div>}
+        {children}
+      </div>
     </div>
   );
 }

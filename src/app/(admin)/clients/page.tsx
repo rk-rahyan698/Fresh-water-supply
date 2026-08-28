@@ -60,12 +60,15 @@ export default async function AdminClientsPage({
         }
       />
 
-      <FilterBar>
-        <UrlSearchInput
-          initialValue={search}
-          placeholder={t.client.searchPlaceholder}
-          className="min-w-0 flex-1"
-        />
+      <FilterBar
+        alwaysVisible={
+          <UrlSearchInput
+            initialValue={search}
+            placeholder={t.client.searchPlaceholder}
+            className="min-w-0 flex-1"
+          />
+        }
+      >
         <UrlSelect
           param="area"
           value={params.area ?? ""}

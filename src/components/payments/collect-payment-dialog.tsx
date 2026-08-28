@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { HandCoins } from "lucide-react";
+import { ChevronDown, HandCoins } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FormError, MoneyInput, Select, Textarea, Input } from "@/components/ui/field";
@@ -92,6 +92,7 @@ export function CollectPaymentDialog({
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | undefined>();
+  const [showMore, setShowMore] = useState(false);
 
   const due = Number(bill.due_amount);
   const hasAdjustment = Number(bill.adjustment_amount ?? 0) > 0;
@@ -202,7 +203,7 @@ export function CollectPaymentDialog({
             discount is already applied - never just a bare "bill amount". */}
         <div className="rounded-xl bg-canvas px-3 py-2.5">
           {hasAdjustment ? (
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
               <Figure label={t.bill.originalBill} value={formatCurrency(bill.bill_amount)} />
               <Figure
                 label={t.bill.adjustment}
@@ -255,22 +256,41 @@ export function CollectPaymentDialog({
           {...register("payment_method")}
         />
 
-        <Input
-          label={t.payment.date}
-          type="date"
-          max={today}
-          error={errors.payment_date?.message}
-          {...register("payment_date")}
-        />
+        {/* Date is today and notes are empty on almost every collection, so
+            they stay out of the way. A collector on a doorstep should be able
+            to finish at Amount -> Method -> Confirm (spec section 28). The
+            fields stay mounted so their values are always submitted. */}
+        <div className={showMore ? undefined : "hidden"}>
+          <div className="space-y-4">
+            <Input
+              label={t.payment.date}
+              type="date"
+              max={today}
+              error={errors.payment_date?.message}
+              {...register("payment_date")}
+            />
 
-        <Textarea
-          label={t.common.notes}
-          hint={t.common.optional}
-          rows={2}
-          placeholder="Anything worth remembering about this payment"
-          error={errors.notes?.message}
-          {...register("notes")}
-        />
+            <Textarea
+              label={t.common.notes}
+              hint={t.common.optional}
+              rows={2}
+              placeholder="Anything worth remembering about this payment"
+              error={errors.notes?.message}
+              {...register("notes")}
+            />
+          </div>
+        </div>
+
+        {!showMore && (
+          <button
+            type="button"
+            onClick={() => setShowMore(true)}
+            className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-medium text-ink-soft transition-colors hover:bg-canvas"
+          >
+            <ChevronDown className="size-4" />
+            Change date or add a note
+          </button>
+        )}
       </form>
     </Modal>
   );

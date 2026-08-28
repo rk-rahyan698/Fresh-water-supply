@@ -253,7 +253,7 @@ export function ClientPaymentsView({
         title={t.clientPayments.history}
         description={`${valid.length} payments · ${formatCurrency(totalPaid)} collected`}
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             {collectAction}
             <Button
               variant="secondary"

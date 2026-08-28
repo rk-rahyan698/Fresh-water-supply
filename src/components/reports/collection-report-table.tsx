@@ -186,7 +186,7 @@ export function CollectionReportTable({
         title={`${context.year} ${t.collections.title.toLowerCase()}`}
         description={`${rows.length} clients · ${t.export.respectsFilters}`}
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <Button
               variant="secondary"
               size="sm"

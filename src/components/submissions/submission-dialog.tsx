@@ -159,7 +159,7 @@ export function SubmissionDialog({ collectors }: { collectors: CollectorBalance[
           />
 
           {selected && (
-            <div className="grid grid-cols-3 gap-2 rounded-xl bg-canvas px-3 py-2.5 text-center">
+            <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-canvas px-2.5 py-2.5 text-center sm:gap-2 sm:px-3">
               <Figure label={t.submission.collected} value={formatCurrency(selected.cashCollected)} />
               <Figure label={t.submission.submitted} value={formatCurrency(selected.submitted)} />
               <Figure

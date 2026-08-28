@@ -30,12 +30,15 @@ export default async function CollectorClientsPage({
         description="Tap a client to see their bill and collect payment."
       />
 
-      <FilterBar>
-        <UrlSearchInput
-          initialValue={search}
-          placeholder={t.client.searchPlaceholder}
-          className="min-w-0 flex-1"
-        />
+      <FilterBar
+        alwaysVisible={
+          <UrlSearchInput
+            initialValue={search}
+            placeholder={t.client.searchPlaceholder}
+            className="min-w-0 flex-1"
+          />
+        }
+      >
         {areas.length > 0 && (
           <UrlSelect
             param="area"

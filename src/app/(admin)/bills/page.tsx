@@ -58,7 +58,15 @@ export default async function BillsPage({
         action={<GenerateBillsButton defaultMonth={month} />}
       />
 
-      <FilterBar>
+      <FilterBar
+        alwaysVisible={
+          <UrlSearchInput
+            initialValue={search}
+            placeholder={t.client.searchPlaceholder}
+            className="min-w-0 flex-1"
+          />
+        }
+      >
         <UrlSelect
           param="month"
           value={month}
@@ -82,11 +90,6 @@ export default async function BillsPage({
             ...areas.map((a) => ({ value: a.id, label: a.name })),
           ]}
           className="w-full sm:w-40"
-        />
-        <UrlSearchInput
-          initialValue={search}
-          placeholder={t.client.searchPlaceholder}
-          className="min-w-0 flex-1"
         />
       </FilterBar>
 

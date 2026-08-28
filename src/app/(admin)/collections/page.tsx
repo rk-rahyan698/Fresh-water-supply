@@ -64,7 +64,15 @@ export default async function CollectionsPage({
         description="Every payment recorded, with the collector who took it."
       />
 
-      <FilterBar>
+      <FilterBar
+        alwaysVisible={
+          <UrlSearchInput
+            initialValue={params.q ?? ""}
+            placeholder={`${t.common.search} ${t.client.one.toLowerCase()}`}
+            className="min-w-0 flex-1"
+          />
+        }
+      >
         <UrlDateInput param="from" value={params.from ?? ""} label={t.common.from} max={dhakaToday()} className="w-full sm:w-40" />
         <UrlDateInput param="to" value={params.to ?? ""} label={t.common.to} max={dhakaToday()} className="w-full sm:w-40" />
         <UrlSelect
@@ -113,11 +121,6 @@ export default async function CollectionsPage({
             { value: "1", label: "Shown" },
           ]}
           className="w-full sm:w-28"
-        />
-        <UrlSearchInput
-          initialValue={params.q ?? ""}
-          placeholder={`${t.common.search} ${t.client.one.toLowerCase()}`}
-          className="min-w-0 flex-1"
         />
       </FilterBar>
 

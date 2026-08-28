@@ -47,7 +47,7 @@ export default async function MyCollectionsPage({
         description="Every payment you have recorded."
       />
 
-      <div className="mb-3 grid grid-cols-3 gap-2.5">
+      <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard label={t.dashboard.todayCollection} value={formatCurrency(stats.today_collection)} />
         <StatCard
           label={formatMonth(month)}

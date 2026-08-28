@@ -108,6 +108,7 @@ async function main() {
   await check("admin", "/clients", adminCookie, "Clients");
   await check("admin", `/clients/${client.id}`, adminCookie, client.name);
   await check("admin", `/clients/${client.id}/edit`, adminCookie, "Edit client");
+  await check("admin", `/clients/${client.id}/payments`, adminCookie, "Payments");
   await check("admin", "/clients/new", adminCookie, "Add client");
   await check("admin", "/areas", adminCookie, "Areas");
   await check("admin", "/bills", adminCookie, "Bills");
@@ -115,6 +116,7 @@ async function main() {
   await check("admin", "/submissions", adminCookie, "Cash submission");
   await check("admin", "/reports/due", adminCookie, "Due Report");
   await check("admin", "/reports/area", adminCookie, "Area Report");
+  await check("admin", "/reports/collections", adminCookie, "Collection Report");
   await check("admin", "/reports/collector", adminCookie, "Collector Report");
   await check("admin", "/reports/monthly", adminCookie, "Monthly Report");
   await check("admin", "/reports/daily", adminCookie, "Daily Collection");

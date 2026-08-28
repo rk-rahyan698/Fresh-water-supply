@@ -45,6 +45,7 @@ const ADMIN_SECTIONS: NavSection[] = [
   {
     heading: t.nav.reports,
     items: [
+      { href: "/reports/collections", label: t.collections.title, icon: HandCoins },
       { href: "/reports/due", label: t.nav.dueReport, icon: FileWarning },
       { href: "/reports/area", label: t.area.summary, icon: MapIcon },
       { href: "/reports/collector", label: t.nav.collectorReport, icon: UserCheck },

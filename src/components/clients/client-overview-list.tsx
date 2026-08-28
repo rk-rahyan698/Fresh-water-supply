@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, HandCoins, User, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge, BillStatusBadge, ClientStatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,10 +52,10 @@ export function ClientOverviewList({
       {/* Mobile: one tappable row per client */}
       <ul className="divide-y divide-line sm:hidden">
         {rows.map((row) => (
-          <li key={row.clientId}>
+          <li key={row.clientId} className="px-4 py-3">
             <Link
               href={`${basePath}/${row.clientId}`}
-              className="flex items-center gap-3 px-4 py-3.5 transition-colors active:bg-canvas"
+              className="flex items-center gap-3 transition-colors active:opacity-70"
             >
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
@@ -88,6 +88,24 @@ export function ClientOverviewList({
               </span>
               <ChevronRight className="size-4 shrink-0 text-ink-faint" />
             </Link>
+            {/* Explicit, thumb-sized targets - the whole row already opens the
+                profile, but Payments needs its own reachable button. */}
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
+              <Link
+                href={`${basePath}/${row.clientId}`}
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-medium text-ink active:bg-canvas"
+              >
+                <User className="size-4" />
+                {t.collections.profile}
+              </Link>
+              <Link
+                href={`${basePath}/${row.clientId}/payments`}
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-700 active:bg-brand-100"
+              >
+                <HandCoins className="size-4" />
+                {t.collections.paymentsAction}
+              </Link>
+            </div>
           </li>
         ))}
       </ul>
@@ -104,6 +122,7 @@ export function ClientOverviewList({
               <TH align="right">{t.bill.paid}</TH>
               <TH align="right">{t.bill.due}</TH>
               <TH>{t.bill.status}</TH>
+              <TH align="right">{t.common.actions}</TH>
             </TR>
           </THead>
           <TBody>
@@ -172,6 +191,24 @@ export function ClientOverviewList({
                   ) : (
                     <span className="text-xs text-ink-faint">No bill</span>
                   )}
+                </TD>
+                <TD align="right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Link
+                      href={`${basePath}/${row.clientId}`}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-medium text-ink transition-colors hover:bg-canvas"
+                    >
+                      <User className="size-3.5" />
+                      {t.collections.profile}
+                    </Link>
+                    <Link
+                      href={`${basePath}/${row.clientId}/payments`}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-brand-50 px-2.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
+                    >
+                      <HandCoins className="size-3.5" />
+                      {t.collections.paymentsAction}
+                    </Link>
+                  </div>
                 </TD>
               </TR>
             ))}

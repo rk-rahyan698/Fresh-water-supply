@@ -13,12 +13,16 @@
     "verify:migration": "node scripts/verify-migration-0004.mjs",
     "verify:pages": "node --env-file-if-exists=.env.local scripts/verify-pages.mjs",
     "verify:analytics": "node scripts/verify-migration-0006.mjs",
-    "verify:all": "npm run verify:db && npm run verify:migration && npm run verify:analytics"
+    "verify:all": "npm run verify:db && npm run verify:migration && npm run verify:analytics && npm run verify:reports && npm run verify:exports",
+    "verify:reports": "node scripts/verify-migration-0007.mjs",
+    "verify:exports": "node scripts/verify-exports.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.34.0",
     "next": "16.3.3",
     "react": "19.2.8",

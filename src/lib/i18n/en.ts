@@ -343,6 +343,50 @@ export const en = {
     dataIntegrity: "Data integrity",
   },
 
+  export: {
+    csv: "Download CSV",
+    excel: "Download Excel (CSV)",
+    pdf: "Download PDF",
+    paymentPdf: "Download payment history PDF",
+    billPdf: "Download bill history PDF",
+    generating: "Preparing...",
+    done: "Download started",
+    failed: "Could not generate the file. Please try again.",
+    noRows: "Nothing to export for this selection.",
+    respectsFilters: "Exports contain exactly what is on screen, with the same filters applied.",
+  },
+
+  collections: {
+    title: "Collection Report",
+    description: "What every client actually paid, month by month.",
+    year: "Year",
+    totalCollected: "Total collected",
+    clients: "Clients",
+    payments: "Payments",
+    averagePayment: "Average payment",
+    yearTotal: "Year total",
+    grandTotal: "TOTAL",
+    basisNote:
+      "Each cell is money collected in that calendar month, by payment date - not the bill amount. A payment made in April against a March bill counts under April.",
+    empty: "No payments recorded for this year and filter.",
+    profile: "Profile",
+    paymentsAction: "Payments",
+  },
+
+  clientPayments: {
+    title: "Payments",
+    description: "Collection history and payment entry for this client.",
+    addPayment: "Record payment",
+    history: "Payment history",
+    noHistory: "No payments recorded for this client yet.",
+    thisYear: "This year",
+    allTime: "All time",
+    totalPaid: "Total paid",
+    totalBilled: "Total billed",
+    totalAdjustments: "Total adjustments",
+    outstanding: "Outstanding",
+  },
+
   errors: {
     generic: "Something went wrong. Please try again.",
     network: "Network problem. Check your connection and try again.",

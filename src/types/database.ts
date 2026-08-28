@@ -520,6 +520,47 @@ export interface Database {
           total_count: number;
         }[];
       };
+      payment_years: {
+        Args: Record<string, never>;
+        Returns: { payment_year: number; payment_count: number; total_amount: number }[];
+      };
+      collection_matrix: {
+        Args: { p_year: number; p_area_id?: string | null; p_collector_id?: string | null };
+        Returns: {
+          client_id: string;
+          client_code: string;
+          client_name: string;
+          area_id: string | null;
+          area_name: string | null;
+          m01: number; m02: number; m03: number; m04: number; m05: number; m06: number;
+          m07: number; m08: number; m09: number; m10: number; m11: number; m12: number;
+          year_total: number;
+          payment_count: number;
+        }[];
+      };
+      collection_summary: {
+        Args: { p_year: number; p_area_id?: string | null; p_collector_id?: string | null };
+        Returns: Json;
+      };
+      client_payment_history: {
+        Args: { p_client_id: string; p_year?: number | null; p_limit?: number };
+        Returns: {
+          payment_id: string;
+          receipt_no: number;
+          billing_month: string;
+          payment_date: string;
+          amount: number;
+          payment_method: PaymentMethod;
+          collector_name: string | null;
+          notes: string | null;
+          voided: boolean;
+          void_reason: string | null;
+        }[];
+      };
+      client_financial_summary: {
+        Args: { p_client_id: string; p_year?: number | null };
+        Returns: Json;
+      };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_active_user: { Args: Record<string, never>; Returns: boolean };
       current_user_role: { Args: Record<string, never>; Returns: UserRole };
@@ -617,4 +658,36 @@ export interface DashboardSummary {
   received_today: number;
   payments_today: number;
   payments_in_month: number;
+}
+
+/** Shape returned by the collection_summary() RPC. */
+export interface CollectionSummary {
+  year: number;
+  area_id: string | null;
+  collector_id: string | null;
+  client_count: number;
+  /** Payment-date basis. */
+  total_collected: number;
+  payment_count: number;
+  paying_clients: number;
+  average_payment: number;
+  /** Billing-month basis. */
+  original_amount: number;
+  adjustment_amount: number;
+  adjusted_amount: number;
+  billed_collected: number;
+  outstanding: number;
+  bill_count: number;
+}
+
+/** Shape returned by the client_financial_summary() RPC. */
+export interface ClientFinancialSummary {
+  year: number | null;
+  paid_in_period: number;
+  original_amount: number;
+  adjustment_amount: number;
+  adjusted_amount: number;
+  collected_amount: number;
+  outstanding: number;
+  bill_count: number;
 }

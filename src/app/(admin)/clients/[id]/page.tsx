@@ -18,6 +18,8 @@ import {
 import { BillAdjustmentButton } from "@/components/bills/bill-adjustment-dialog";
 import { BillHistoryMatrix } from "@/components/clients/bill-history-matrix";
 import { UrlSelect } from "@/components/filters/url-controls";
+import { LinkButton } from "@/components/ui/button";
+import { HandCoins } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import {
   getClient,
@@ -85,6 +87,13 @@ export default async function AdminClientDetailPage({
         <ArrowLeft className="size-4" />
         {t.client.many}
       </Link>
+
+      <div className="mb-3 flex justify-end">
+        <LinkButton href={`/clients/${client.id}/payments`} size="md">
+          <HandCoins className="size-4.5" />
+          {t.collections.paymentsAction}
+        </LinkButton>
+      </div>
 
       <div className="space-y-3">
         <ClientSummaryCard

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import {
   AddUserButton,
+  DeleteUserButton,
   EditUserButton,
   ResetPasswordButton,
 } from "@/components/users/user-dialogs";
@@ -62,6 +63,7 @@ export default async function UsersPage() {
                   <div className="mt-2.5 flex items-center gap-2">
                     <EditUserButton user={user} isSelf={user.id === ctx.userId} />
                     <ResetPasswordButton user={user} />
+                    <DeleteUserButton user={user} isSelf={user.id === ctx.userId} />
                   </div>
                 </MobileCard>
               ))}
@@ -109,6 +111,7 @@ export default async function UsersPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <EditUserButton user={user} isSelf={user.id === ctx.userId} />
                           <ResetPasswordButton user={user} />
+                          <DeleteUserButton user={user} isSelf={user.id === ctx.userId} />
                         </div>
                       </TD>
                     </TR>
@@ -121,8 +124,10 @@ export default async function UsersPage() {
       </Card>
 
       <p className="mt-3 px-1 text-xs text-ink-faint">
-        Users are never deleted - deactivate them instead, so their collection history stays
-        intact.
+        Deactivating stops someone signing in while keeping their name on every payment they
+        collected - that is the right choice for anyone who has handled money. Deleting removes the
+        account for good and is only possible when it has no financial history. Adding and deleting
+        both ask for your own password first.
       </p>
     </>
   );

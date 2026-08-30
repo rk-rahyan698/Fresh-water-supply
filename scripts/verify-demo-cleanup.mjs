@@ -126,6 +126,28 @@ async function main() {
   /* ------------------------------------------------------------ run it */
   // Stage the dangerous case inside a transaction and roll it back, so the
   // guard is proven without leaving an undeletable payment behind.
+  console.log("\n== The interlock refuses to lock you out ==");
+  // Temporarily make the real owner a collector, so the only active admin is
+  // the demo one - exactly the state this project was found in.
+  await db.exec(`update public.profiles set role = 'collector' where id = '${owner}';`);
+  let lockoutRefused = false;
+  try {
+    await db.exec(deletionBlock());
+  } catch (e) {
+    lockoutRefused = /only active admin is a demo account/.test(String(e.message));
+  }
+  // The failed BEGIN leaves the session in an aborted transaction; clear it.
+  await db.exec("ROLLBACK").catch(() => {});
+  check("aborts while the only admin is a demo account", lockoutRefused,
+    "the lockout guard did not fire - running STEP 3 would strand the user");
+  check("nothing was deleted by the aborted run",
+    (await count("clients")) === 15, `${await count("clients")} clients left, expected 15`);
+
+  // Restore the real admin and continue.
+  await db.exec(`update public.profiles set role = 'admin' where id = '${owner}';`);
+  check("a real admin makes the script runnable again",
+    (await count("profiles", `role = 'admin' and is_active and email not like '%@watersupply.demo'`)) === 1);
+
   console.log("\n== The interlock refuses to delete real money ==");
   await db.exec("BEGIN");
   await as(owner);

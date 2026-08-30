@@ -1,0 +1,21 @@
+# Kept in the project, but never uploaded to Vercel.
+#
+# Nothing here is imported by src/, so none of it is needed to build or run the
+# app. Excluding it keeps deploys small and keeps the seed script - which can
+# recreate demo data - away from production entirely.
+
+# Database schema and one-off maintenance SQL. Applied through the Supabase
+# dashboard by hand, never by the app at runtime.
+supabase/
+
+# Verification suites and the demo seeder. Local tooling only.
+scripts/
+
+# Notes for coding agents.
+AGENTS.md
+CLAUDE.md
+
+# Build output and logs - Vercel builds its own.
+.next/
+*.log
+*.tsbuildinfo

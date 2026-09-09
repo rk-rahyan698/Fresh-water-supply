@@ -85,6 +85,13 @@ Or run them individually **in order**, from `supabase/migrations/`:
 They are written to be safe to re-run, on an empty database and on one that
 already holds bills and payments.
 
+> After applying them, **reload the PostgREST schema cache** — Supabase →
+> **API Docs → Reload**, or run `notify pgrst, 'reload schema';` in the SQL
+> editor. Supabase usually does this for you, but `0008` adds `monthly_bill`
+> as a *computed field* rather than a column, and PostgREST only serves it once
+> it has seen it. If the cache is stale the app throws a message saying exactly
+> this rather than quietly showing ৳0.
+
 If you prefer the CLI, push the migrations folder (ignore `setup.sql`, which
 would apply the same SQL a second time):
 
@@ -680,7 +687,22 @@ restart `npm run dev` — Next.js only reads env files at startup.
 
 **Signed in but immediately bounced back to `/login`**
 The auth user has no `profiles` row, or its `is_active` is false. Check the
-`profiles` table.
+`profiles` table. On a deployed site, also check that your Vercel URL is in
+Supabase → **Authentication → URL Configuration**; a session cookie set for the
+wrong origin looks exactly like this.
+
+**"Supabase did not return the computed field `monthly_bill`"**
+`0008_normalize_3nf.sql` has not been applied, or PostgREST's schema cache is
+stale. Apply it, then Supabase → **API Docs → Reload**, or run
+`notify pgrst, 'reload schema';`.
+
+**Every page returns 500 on Vercel, but the build was green**
+The build never contacts Supabase, so it cannot catch a database problem. Work
+through the four checks in
+[Deploying to Vercel → A green build is not a green site](#a-green-build-is-not-a-green-site).
+The one people miss: a deleted or paused Supabase project stops resolving in
+DNS entirely — `nslookup <your-ref>.supabase.co` returning
+`Non-existent domain` means the project is gone.
 
 **"No bill exists for this client for the selected month"**
 Bills for that month have not been generated. Admin → **Bills → Generate monthly

@@ -14,6 +14,24 @@ import type {
 
 export const PAGE_SIZE = 25;
 
+/**
+ * `monthly_bill` is a PostgREST computed field, not a column (migration 0008).
+ *
+ * If it comes back missing, PostgREST has not picked up
+ * `public.monthly_bill(public.clients)` - almost always because the schema
+ * cache is stale after applying the migration. Silently rendering ৳0 on a
+ * billing screen is the worst possible outcome, so say what is wrong instead.
+ */
+function assertRateField<T extends { monthly_bill?: unknown }>(row: T | null | undefined): void {
+  if (row && row.monthly_bill === undefined) {
+    throw new Error(
+      "Supabase did not return the computed field `monthly_bill`. Apply " +
+        "supabase/migrations/0008_normalize_3nf.sql, then reload the schema cache " +
+        "(Supabase → API Docs → Reload, or `notify pgrst, 'reload schema';`).",
+    );
+  }
+}
+
 /** `%` and `_` are wildcards in ILIKE - neutralise them before interpolating. */
 export function escapeLike(term: string): string {
   return term.replace(/[%_\\]/g, (c) => `\\${c}`);
@@ -63,6 +81,7 @@ export async function listClients(params: ClientListParams = {}): Promise<Client
 
   const { data, error, count } = await query.overrideTypes<ClientWithRate[], { merge: false }>();
   if (error) throw error;
+  assertRateField(data?.[0]);
 
   const total = count ?? 0;
   return {
@@ -82,6 +101,7 @@ export async function getClient(id: string): Promise<ClientWithArea | null> {
     .maybeSingle()
     .overrideTypes<ClientWithArea, { merge: false }>();
   if (error) throw error;
+  assertRateField(data);
   return data;
 }
 

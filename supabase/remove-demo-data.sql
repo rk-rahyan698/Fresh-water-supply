@@ -94,8 +94,9 @@ select
   (select count(*) from demo_areas)                                            as demo_areas,
   (select count(*) from public.monthly_bills
      where client_id in (select id from demo_clients))                         as demo_bills,
-  (select count(*) from public.payments
-     where client_id in (select id from demo_clients))                         as demo_payments,
+  (select count(*) from public.payments p
+     join public.monthly_bills b on b.id = p.monthly_bill_id
+     where b.client_id in (select id from demo_clients))                       as demo_payments,
   (select count(*) from public.cash_submissions
      where collector_id in (select id from demo_users))                        as demo_submissions,
   (select count(*) from public.client_rate_history
@@ -107,12 +108,14 @@ select
                                                                                as real_admins_remaining,
   -- These two MUST be 0. Anything else means real work is entangled with the
   -- demo rows and would be destroyed - investigate before deleting.
-  (select count(*) from public.payments
-     where client_id in (select id from demo_clients)
-       and collected_by not in (select id from demo_users))                     as real_user_payments_on_demo_clients,
-  (select count(*) from public.payments
-     where collected_by in (select id from demo_users)
-       and client_id not in (select id from demo_clients))                      as demo_user_payments_on_real_clients,
+  (select count(*) from public.payments p
+     join public.monthly_bills b on b.id = p.monthly_bill_id
+     where b.client_id in (select id from demo_clients)
+       and p.collected_by not in (select id from demo_users))                   as real_user_payments_on_demo_clients,
+  (select count(*) from public.payments p
+     join public.monthly_bills b on b.id = p.monthly_bill_id
+     where p.collected_by in (select id from demo_users)
+       and b.client_id not in (select id from demo_clients))                    as demo_user_payments_on_real_clients,
   -- Totals, so you can confirm what survives.
   (select count(*) from public.clients)                                        as total_clients,
   (select count(*) from public.payments)                                       as total_payments;
@@ -165,9 +168,10 @@ do $$
 declare v_count integer;
 begin
   select count(*) into v_count
-    from public.payments
-   where client_id in (select id from _demo_clients)
-     and collected_by not in (select id from _demo_users);
+    from public.payments p
+    join public.monthly_bills b on b.id = p.monthly_bill_id
+   where b.client_id in (select id from _demo_clients)
+     and p.collected_by not in (select id from _demo_users);
   if v_count > 0 then
     raise exception
       'Refusing to continue: % payment(s) on demo clients were collected by a non-demo user. Investigate before deleting.', v_count;
@@ -178,7 +182,10 @@ end $$;
 -- Re-enabled a few lines below, inside the same transaction.
 alter table public.payments disable trigger payments_guard;
 
-delete from public.payments where client_id in (select id from _demo_clients);
+delete from public.payments p
+ using public.monthly_bills b
+ where b.id = p.monthly_bill_id
+   and b.client_id in (select id from _demo_clients);
 
 alter table public.payments enable trigger payments_guard;
 

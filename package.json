@@ -20,7 +20,7 @@
     "verify:exports": "node scripts/verify-exports.mjs",
     "verify:setup": "node scripts/build-setup-sql.mjs --check",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "verify:all": "npm run verify:db && npm run verify:migration && npm run verify:analytics && npm run verify:reports && npm run verify:3nf && npm run verify:exports && npm run verify:setup",
+    "verify:all": "npm run verify:db && npm run verify:migration && npm run verify:analytics && npm run verify:reports && npm run verify:3nf && npm run verify:exports && npm run verify:cleanup && npm run verify:setup",
     "verify:pages": "node --env-file-if-exists=.env.local scripts/verify-pages.mjs",
     "verify:live": "node --env-file-if-exists=.env.local scripts/verify-live.mjs",
     "verify:cleanup": "node scripts/verify-demo-cleanup.mjs",

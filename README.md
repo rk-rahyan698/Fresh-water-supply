@@ -543,8 +543,9 @@ trust.
 | `npm run verify:reports` | Collection matrix, summaries and per-client history |
 | `npm run verify:3nf` | Apply 0008 to a *populated* schema: normalisation, no data loss |
 | `npm run verify:exports` | CSV and PDF generation |
+| `npm run verify:cleanup` | `remove-demo-data.sql` deletes demo rows and only demo rows |
 | `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
-| `npm run verify:all` | Every offline suite in sequence (245 assertions) |
+| `npm run verify:all` | Every offline suite in sequence (266 assertions) |
 | `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write |

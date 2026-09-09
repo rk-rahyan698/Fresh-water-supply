@@ -22,6 +22,7 @@ const MIGRATIONS = join(ROOT, "supabase", "migrations");
 const FILES = [
   "0001_init_schema", "0002_functions", "0003_rls_policies", "0004_bill_adjustments",
   "0005_areas_and_rates", "0006_analytics", "0007_collection_report",
+  "0008_normalize_3nf",
 ];
 
 const db = new PGlite({ extensions: { pg_trgm } });
@@ -118,7 +119,12 @@ async function main() {
   /* ------------------------------------------------------ the safety check */
   console.log("\n== Payments really are undeletable without the trigger off ==");
   let blocked = false;
-  try { await db.query(`delete from public.payments where client_id='${demoIds[0]}'`); }
+  // payments has no client_id since 0008 - reach it through the bill.
+  try {
+    await db.query(`delete from public.payments p
+                     using public.monthly_bills b
+                     where b.id = p.monthly_bill_id and b.client_id = '${demoIds[0]}'`);
+  }
   catch (e) { blocked = /PAYMENT_DELETE_FORBIDDEN/.test(String(e.message)); }
   check("a plain DELETE on payments is rejected", blocked,
     "the guard did not fire - the cleanup script's trigger toggle is the only way");

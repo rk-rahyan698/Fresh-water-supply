@@ -207,7 +207,21 @@ create table if not exists public.payments (
 );
 
 create index if not exists payments_bill_idx on public.payments (monthly_bill_id);
-create index if not exists payments_client_idx on public.payments (client_id, payment_date desc);
+
+-- payments.client_id is removed by 0008 (it was transitively dependent on
+-- monthly_bill_id - see that file). Guarded rather than deleted outright so
+-- this file still describes the schema it originally created, and so that
+-- re-running the whole migration set on an already-migrated database does not
+-- fail here trying to index a column that is no longer there.
+do $$ begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'payments' and column_name = 'client_id'
+  ) then
+    execute 'create index if not exists payments_client_idx
+               on public.payments (client_id, payment_date desc)';
+  end if;
+end $$;
 create index if not exists payments_collector_date_idx on public.payments (collected_by, payment_date desc);
 create index if not exists payments_date_idx on public.payments (payment_date desc);
 create index if not exists payments_active_idx on public.payments (payment_date) where voided_at is null;

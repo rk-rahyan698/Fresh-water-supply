@@ -189,7 +189,7 @@ export default async function AdminDashboardPage({
             {recent.payments.map((payment) => (
               <li key={payment.id}>
                 <Link
-                  href={`/clients/${payment.client_id}`}
+                  href={`/clients/${payment.clients?.id ?? ""}`}
                   className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5"
                 >
                   <div className="min-w-0 flex-1">

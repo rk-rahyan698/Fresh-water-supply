@@ -19,6 +19,7 @@ const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "..", "supabase
 const FILES = [
   "0001_init_schema", "0002_functions", "0003_rls_policies",
   "0004_bill_adjustments", "0005_areas_and_rates", "0006_analytics",
+  "0008_normalize_3nf",
 ];
 
 const db = new PGlite({ extensions: { pg_trgm } });

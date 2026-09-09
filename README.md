@@ -20,11 +20,12 @@ At any moment the owner can answer:
 
 - [Quick start](#quick-start)
 - [Setup](#setup)
-- [Demo data](#demo-data)
+- [First run](#first-run)
 - [How the money works](#how-the-money-works)
 - [Discounts vs. underpayment](#discounts-vs-underpayment)
 - [Areas and rate changes](#areas-and-rate-changes)
 - [Financial integrity](#financial-integrity)
+- [Third normal form](#third-normal-form)
 - [Security model](#security-model)
 - [Screens](#screens)
 - [Project structure](#project-structure)
@@ -41,7 +42,7 @@ At any moment the owner can answer:
 npm install
 cp .env.example .env.local     # then fill in your Supabase keys
 # paste supabase/setup.sql into the Supabase SQL editor (see Setup)
-npm run seed                   # optional demo data
+# create the first admin in the Supabase dashboard (see Setup step 4)
 npm run dev
 ```
 
@@ -60,8 +61,13 @@ password somewhere safe.
 ### 2. Run the migrations
 
 **Easiest path:** open **SQL Editor → New query**, paste the entire contents of
-`supabase/setup.sql`, and hit **Run**. That one file is the three migrations
+`supabase/setup.sql`, and hit **Run**. That one file is every migration
 concatenated in order, and it is safe to run twice.
+
+`setup.sql` is generated — `npm run build:setup` rebuilds it from the
+migrations directory, and `npm run verify:setup` fails if the checked-in copy
+has fallen behind. It used to be maintained by hand, which is how it once ended
+up missing a migration.
 
 Or run them individually **in order**, from `supabase/migrations/`:
 
@@ -72,9 +78,12 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0003_rls_policies.sql` | Row Level Security policies and grants |
 | `0004_bill_adjustments.sql` | Discounts / waivers, and adjustment-aware due + status |
 | `0005_areas_and_rates.sql` | Areas, client area assignment, scheduled rate changes |
-| `0006_analytics.sql` | Year x month bill matrix, area summary, area-filtered aggregates |
+| `0006_analytics.sql` | Year × month bill matrix, area summary, area-filtered aggregates |
+| `0007_collection_report.sql` | Collection matrix, headline summaries, per-client history |
+| `0008_normalize_3nf.sql` | Third normal form: removes two redundant columns |
 
-They are written to be safe to re-run.
+They are written to be safe to re-run, on an empty database and on one that
+already holds bills and payments.
 
 If you prefer the CLI, push the migrations folder (ignore `setup.sql`, which
 would apply the same SQL a second time):
@@ -103,7 +112,7 @@ into a client bundle.
 
 ### 4. Create the first admin
 
-Either run `npm run seed` (below), or create a user by hand:
+There is no seeder - create the owner account by hand, once:
 
 1. Supabase → **Authentication → Users → Add user**, with "Auto Confirm" on.
 2. Supabase → **Table Editor → profiles**, set that row's `role` to `admin`.
@@ -113,36 +122,31 @@ A profile row is created automatically for every new auth user by the
 
 ---
 
-## Demo data
+## First run
 
-```bash
-npm run seed
-```
+There is no demo seeder — the project ships empty on purpose, so nothing
+fictional can ever end up in a real ledger. Getting to a working screen takes
+about a minute:
 
-Creates one admin, two collectors, 14 clients, three months of bills, a
-realistic spread of full and partial payments, and cash submissions.
+1. Sign in as the admin you created in **Setup step 4**.
+2. **Areas → Add area.** Optional, but area filters run through every report,
+   so it is worth doing first.
+3. **Clients → Add client.** The client code is suggested for you. The monthly
+   rate you enter here becomes the client's opening rate, effective from their
+   start month.
+4. **Bills → Generate monthly bills** for the current month. Every active client
+   whose start date falls on or before the end of that month gets one bill.
+   Running it again creates nothing extra.
+5. Open a client and **Collect payment**. The bill's paid, due and status
+   figures update themselves, and the receipt is printable.
 
-The seeder deliberately works through the **real API**: it creates users with
-the admin API, then *signs in as each of them* and calls
-`generate_monthly_bills`, `record_payment` and `create_cash_submission` exactly
-as the app does. Seeding therefore also proves that auth, RLS and the financial
-functions are wired up correctly.
+To add collectors: **Users → Add user**. They get the `collector` role by
+default and see only their own clients and their own collections.
 
-| Role | Email | Name |
-|---|---|---|
-| admin | `abbu@watersupply.demo` | Abbu (Owner) |
-| collector | `mama@watersupply.demo` | Mama |
-| collector | `jamal@watersupply.demo` | Jamal |
-
-The password is **not hardcoded**. Set `SEED_PASSWORD` in `.env.local` to choose
-one, or leave it blank and the script generates a random password and prints it
-once when it finishes.
-
-Re-running is safe: users and clients are upserted, bill generation is
-idempotent, and payments/submissions are only seeded when there are none yet.
-
-> The seed script is for development and demo environments. It resets the
-> passwords of the three demo accounts each time it runs.
+`supabase/remove-demo-data.sql` is a leftover from the seeder that used to
+exist: it deletes the three `@watersupply.demo` accounts and everything they
+created, and refuses to run until a real admin exists. Keep it only if your
+database still holds those rows — on a fresh project it has nothing to do.
 
 ---
 
@@ -154,7 +158,7 @@ Client → Monthly bill → Payment → Collector → Cash submission → Report
 
 **1. Bills.** Admin picks a month and hits *Generate monthly bills*. Every active
 client whose `start_date` falls on or before the end of that month gets one bill
-at their current `monthly_bill` rate. Running it twice creates nothing extra —
+at the rate effective for that month. Running it twice creates nothing extra —
 the `(client_id, billing_month)` unique constraint plus `ON CONFLICT DO NOTHING`
 guarantee one bill per client per month.
 
@@ -224,8 +228,8 @@ write arrives.
 
 | Rule | How it is enforced |
 |---|---|
-| Due is never negative | `CHECK (paid_amount <= bill_amount)` |
-| `due_amount` always equals bill − paid | `GENERATED ALWAYS AS (bill_amount - paid_amount) STORED` |
+| Due is never negative | `CHECK (paid_amount <= bill_amount - adjustment_amount)` |
+| `due_amount` always equals adjusted − paid | `GENERATED ALWAYS AS (bill_amount - adjustment_amount - paid_amount) STORED` |
 | Status matches the amounts | `status` is a `GENERATED` column, not app logic |
 | `paid_amount` never drifts | Recomputed by trigger as `SUM(payments)` where not voided — app code never writes it |
 | No duplicate bills | `UNIQUE (client_id, billing_month)` |
@@ -316,13 +320,16 @@ the business totals.
 Every list and report takes an area filter, and they combine - *August 2026 +
 Area 1 + Mama* answers "what did Mama collect in Area 1 last month".
 
-**Rate changes.** A client's `monthly_bill` is the rate in force today. Bill
-generation copies it into `monthly_bills.bill_amount`, and an existing bill is
-never rewritten, so changing the rate has only ever affected future bills.
+**Rate changes.** `client_rate_history` is the single source of truth for what
+a client pays. Every client has an opening row at their start month, and the
+rate in force for any month is the newest row with `effective_from <=` that
+month. Bill generation copies that figure into `monthly_bills.bill_amount`, and
+an existing bill is never rewritten, so a rate change only ever affects future
+bills.
 
-`client_rate_history` adds what that could not do: scheduling. *"৳1,200 from
-September"* is recorded with a reason, and generation asks for the rate
-effective for the month it is billing:
+Scheduling therefore comes for free: *"৳1,200 from September"* is recorded with
+a reason and a date, and generation asks for the rate effective for the month it
+is billing:
 
 ```
 January–March  ৳1,000   (already billed - untouched)
@@ -332,10 +339,90 @@ April onwards  ৳1,200   (scheduled, effective April)
 A rate can never be back-dated into a month that is already billed - the SQL
 function rejects it.
 
+There is no second copy of the rate anywhere. There used to be:
+`clients.monthly_bill` held "the rate in force today", and nothing moved it
+when a scheduled change came into effect - so from the 1st of the month the
+client list showed the old figure while billing used the new one, indefinitely.
+Migration `0008` removed the column and made the current rate a derived value.
+See [Third normal form](#third-normal-form).
+
 **Long-term history.** A client's bills are shown as a Year x Month matrix,
 years as columns and months as rows. Only a bounded year window is ever
 queried, and a cell's payments load when the cell is opened - so a client with
 ten years of history stays as fast as one with three months.
+
+---
+
+## Third normal form
+
+The schema is in 3NF. Two columns were not, and both had already produced
+wrong numbers before they were removed in `0008_normalize_3nf.sql`.
+
+### `clients.monthly_bill`
+
+`client_rate_history` holds the rate for every effective month, so a separate
+"current rate" column on `clients` was a second, independently-updated copy of
+a fact that table already owned.
+
+Nothing kept the two in step across a month boundary. Schedule *"৳1,500 from
+next month"* and `clients.monthly_bill` stayed at ৳1,000 — no job moves it when
+the month turns over. From the 1st onwards the client list and the client detail
+page showed ৳1,000 while `generate_monthly_bills()` billed ৳1,500, and they
+stayed out of step until somebody happened to re-save the client form.
+
+Now: `client_rate_history` is the sole authority, every client is guaranteed an
+opening row at their start month, and the current rate reaches the API as a
+PostgREST **computed field** with the same name. Callers still read
+`monthly_bill` — it is derived on read instead of stored twice, so it cannot
+disagree with the rate billing uses. Because it is computed, it has to be asked
+for by name: `.select("*, monthly_bill")`, not `.select("*")`.
+
+### `payments.client_id`
+
+A payment belongs to a bill, and a bill belongs to a client:
+
+```
+payments.id → payments.monthly_bill_id → monthly_bills.client_id
+```
+
+`monthly_bill_id` is not a key of `payments` and `client_id` is not part of one,
+so `client_id` was transitively dependent — the textbook 3NF violation. Nothing
+constrained it to match the bill's own client either, so a direct insert could
+file a payment under client A against client B's bill, after which every report
+disagreed with every other depending on which column it joined through.
+
+Now: the column is gone. Payments reach their client through the bill, which is
+the only path that can be wrong in one place at a time. The migration refuses to
+drop the column if any existing row disagrees with its bill, rather than burying
+the evidence.
+
+The API shape did not change. `src/lib/queries/payments.ts` embeds
+`monthly_bills → clients` and flattens the result, so components still receive
+`payment.clients`.
+
+### Deliberately kept: `monthly_bills.paid_amount`
+
+This one looks like denormalisation and is not a 3NF violation: it is an
+**aggregate** over `payments`, not a functional dependency between columns of
+`monthly_bills`, and normal forms are defined over functional dependencies.
+
+It is a materialised sum, maintained only by `sync_bill_paid_amount()` and
+re-derived by `monthly_bills_derive_paid()` if anything writes it directly — so
+even an admin with a raw REST client cannot desync it. `due_amount` and `status`
+are `GENERATED` from it, which is what makes the bill's arithmetic impossible
+to get wrong.
+
+### Checking it
+
+```bash
+npm run verify:3nf
+```
+
+48 assertions. It seeds a populated database on the *old* schema, reproduces the
+rate anomaly, applies `0008`, and then proves the columns are gone, that no
+bill, payment or total changed, that a scheduled rate now flows through to the
+generated bill with nobody re-saving anything, and that every report which used
+to read `payments.client_id` still returns the same figures.
 
 ---
 
@@ -409,26 +496,29 @@ src/
     (auth)/login/            Sign in
     (admin)/                 Admin shell + role gate
       dashboard/ clients/ bills/ collections/ submissions/
-      reports/{due,collector,monthly,daily}/ users/ settings/
+      areas/ reports/{due,collector,monthly,daily,area,collections}/ users/ settings/
     (collector)/my/          Collector shell + role gate
       dashboard/ clients/ collections/ submissions/ profile/
     receipt/[id]/            Printable receipt (both roles)
   components/
     ui/                      Button, Card, Field, Modal, Toast, Table, ...
     layout/                  App shell, sidebar, bottom tabs
-    clients/ payments/ submissions/ users/ bills/ charts/ filters/
+    clients/ payments/ submissions/ users/ bills/ areas/ charts/ reports/ filters/
   lib/
     supabase/                Browser, server, admin and proxy clients
     actions/                 Server Actions (all mutations)
     queries/                 Server-side reads
     validations/             Zod schemas, shared by forms and actions
+    export/                  CSV and PDF generation (browser-side)
     i18n/                    UI strings (see "Adding Bengali")
     format.ts errors.ts auth.ts env.ts
+  proxy.ts                   Session refresh + auth gate (Next 16 middleware)
   types/database.ts          Hand-maintained mirror of the SQL schema
 supabase/
   migrations/                0001 schema · 0002 functions · 0003 RLS · 0004 adjustments
-  setup.sql                  the three above, concatenated for the SQL editor
-scripts/                     seed.mts · verify-db.mjs · verify-migration-0004.mjs
+                             0005 areas+rates · 0006 analytics · 0007 reports · 0008 3NF
+  setup.sql                  GENERATED - all of the above, for the SQL editor
+scripts/                     verify-*.mjs suites · build-setup-sql.mjs
 ```
 
 Forms use React Hook Form + Zod. **The same Zod schema runs again inside the
@@ -446,22 +536,64 @@ trust.
 | `npm start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run verify:deploy` | **Reproduce the Vercel build locally, before pushing** |
 | `npm run verify:db` | Run migrations + 57 assertions in PGlite |
 | `npm run verify:migration` | Apply 0004 to a *populated* schema and check nothing breaks |
 | `npm run verify:analytics` | Areas, rate history, bill matrix and area reporting |
-| `npm run verify:all` | All three database suites in sequence |
+| `npm run verify:reports` | Collection matrix, summaries and per-client history |
+| `npm run verify:3nf` | Apply 0008 to a *populated* schema: normalisation, no data loss |
+| `npm run verify:exports` | CSV and PDF generation |
+| `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
+| `npm run verify:all` | Every offline suite in sequence (245 assertions) |
+| `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
-| `npm run seed` | Demo data (reads `.env.local`) |
+| `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write |
+
+Everything from `verify:db` down to `verify:setup` runs entirely offline
+against PGlite — no Docker, no Supabase account, safe in CI. Only
+`verify:pages` and `verify:live` talk to a real project.
 
 ---
 
 ## Deploying to Vercel
 
+### Check it first
+
+```bash
+npm run verify:deploy
+```
+
+Run this before every push. `npm run build` is **not** the build Vercel runs —
+Vercel builds only the files git tracks, minus everything `.vercelignore`
+excludes, with a clean `npm ci` and no `.env.local`. `verify:deploy`
+reconstructs exactly that tree and builds it, so a deploy-only failure shows up
+in a couple of minutes locally instead of as a red cross in the dashboard.
+
+It catches the four things that differ from your working copy:
+
+| Difference | What it looks like on Vercel |
+|---|---|
+| An untracked or gitignored file the build needs | `Module not found` |
+| A `.vercelignore` rule that matches more than intended | `Module not found`, in bulk |
+| `package.json` and `package-lock.json` out of sync | `npm ci` fails |
+| A module reading a required env var at import time | Build fails collecting page data |
+
+> **The `.vercelignore` trap, in particular.** `.vercelignore` uses gitignore
+> matching, where a pattern *without* a slash matches at **any** depth. A rule
+> reading `supabase/` therefore deletes `src/lib/supabase/` as well — the
+> Supabase clients the whole app imports — and the deploy dies with sixteen
+> copies of `Can't resolve '@/lib/supabase/server'` while the local build stays
+> green. Every rule in this project's `.vercelignore` is anchored with a
+> leading slash for that reason, and `verify:deploy` fails loudly if a future
+> edit drops one.
+
+### Steps
+
 1. Push the repository to GitHub.
 2. Vercel → **Add New → Project** → import the repo. The framework preset is
    detected automatically; no build settings need changing.
 3. Add the environment variables under **Settings → Environment Variables**, for
-   Production *and* Preview:
+   Production **and** Preview **and** Development:
 
    ```
    NEXT_PUBLIC_SUPABASE_URL
@@ -470,13 +602,36 @@ trust.
    NEXT_PUBLIC_BUSINESS_NAME
    ```
 
+   All three environments, not just Production: `NEXT_PUBLIC_*` values are
+   baked into the browser bundle **at build time**, so a preview deploy built
+   without them ships a client that cannot reach Supabase at all — the pages
+   render and then every action fails.
+
    Do **not** add `SEED_PASSWORD` in production.
 4. Deploy.
-5. In Supabase → **Authentication → URL Configuration**, add your Vercel domain
-   to the allowed redirect URLs.
+5. In Supabase → **Authentication → URL Configuration**, set **Site URL** to
+   your Vercel domain and add it to **Redirect URLs**. Without this, login
+   appears to succeed and then bounces straight back to `/login`.
 
 `.env*` is gitignored (with `.env.example` explicitly re-included), so secrets
 cannot be committed by accident.
+
+### A green build is not a green site
+
+The build never contacts Supabase, so it cannot tell you the database is
+unreachable. If every page returns 500 after a successful deploy, check in this
+order:
+
+1. **Does the project still exist?** A deleted or paused Supabase project stops
+   resolving in DNS entirely. Confirm with
+   `nslookup <your-ref>.supabase.co` — `Non-existent domain` means the project
+   is gone and no amount of redeploying will help; create a new one and run
+   `supabase/setup.sql` against it.
+2. **Are the environment variables actually set for this environment?** Vercel
+   scopes them per environment; a Preview deploy does not inherit Production's.
+3. **Has `supabase/setup.sql` been run?** A project with no tables returns a
+   PostgREST error on every query.
+4. **Is the Vercel URL in Supabase's redirect allow-list?** (Step 5 above.)
 
 ---
 
@@ -538,10 +693,7 @@ says so. The bill's paid/due figures are still complete.
 They cannot drift — `paid_amount` is recomputed by trigger from the payment rows.
 Check whether a payment was voided (Collections → set *Voided* to "Shown").
 
-**`npm run seed` fails with "Could not sign in"**
-Email confirmations are on for new signups. The seeder sets `email_confirm: true`,
-so this usually means `SUPABASE_SERVICE_ROLE_KEY` is wrong or belongs to a
-different project.
-#   F r e s h - w a t e r - s u p p l y 
- 
- 
+**A newly created user cannot sign in**
+Email confirmations are on for new signups. Create the user from Supabase →
+**Authentication → Users → Add user** with "Auto Confirm" ticked, or confirm
+the address from the same screen afterwards.

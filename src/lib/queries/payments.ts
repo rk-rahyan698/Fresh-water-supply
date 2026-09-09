@@ -42,33 +42,63 @@ export interface PaymentListResult {
   sum: number;
 }
 
+/**
+ * A payment reaches its client through its bill.
+ *
+ * payments has no client_id of its own (see migration 0008: it would be
+ * transitively dependent on monthly_bill_id, which is the 3NF violation the
+ * column was removed for). So the embed nests, and `flattenPayment` below
+ * lifts the client back to the top level for the view model - the UI keeps the
+ * flat shape it always had, while the database stays normalised.
+ */
+const PAYMENT_SELECT =
+  "*, monthly_bills!inner(id, billing_month, bill_amount, " +
+  "clients!inner(id, name, client_code, area_id)), " +
+  "collector:profiles!payments_collected_by_fkey(id, full_name)";
+
+type NestedPaymentRow = Omit<PaymentDetail, "clients" | "monthly_bills"> & {
+  monthly_bills:
+    | (Pick<MonthlyBill, "id" | "billing_month" | "bill_amount"> & {
+        clients: Pick<Client, "id" | "name" | "client_code" | "area_id"> | null;
+      })
+    | null;
+};
+
+function flattenPayment(row: NestedPaymentRow): PaymentDetail {
+  const bill = row.monthly_bills;
+  return {
+    ...row,
+    clients: bill?.clients ?? null,
+    monthly_bills: bill
+      ? { id: bill.id, billing_month: bill.billing_month, bill_amount: bill.bill_amount }
+      : null,
+  };
+}
+
 export async function listPayments(filters: PaymentFilters = {}): Promise<PaymentListResult> {
   const supabase = await createClient();
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = filters.pageSize ?? PAGE_SIZE;
   const from = (page - 1) * pageSize;
 
-  // monthly_bills uses !inner so the billingMonth filter below can reach into
-  // the embedded row. Every payment always has a bill, so this never drops rows.
-  const select =
-    "*, clients!inner(id, name, client_code, area_id), monthly_bills!inner(id, billing_month, bill_amount), " +
-    "collector:profiles!payments_collected_by_fkey(id, full_name)";
-
+  // !inner all the way down, so the billingMonth / client / area / search
+  // filters below can reach into the embedded rows. Every payment always has a
+  // bill and every bill a client, so this never drops rows.
   let query = supabase
     .from("payments")
-    .select(select, { count: "exact" })
+    .select(PAYMENT_SELECT, { count: "exact" })
     .order("payment_date", { ascending: false })
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
 
   query = applyPaymentFilters(query, filters);
 
-  const { data, error, count } = await query.overrideTypes<PaymentDetail[], { merge: false }>();
+  const { data, error, count } = await query.overrideTypes<NestedPaymentRow[], { merge: false }>();
   if (error) throw error;
 
   const total = count ?? 0;
   return {
-    payments: data ?? [],
+    payments: (data ?? []).map(flattenPayment),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
@@ -84,7 +114,7 @@ export async function sumPayments(filters: PaymentFilters = {}): Promise<number>
   const supabase = await createClient();
   let query = supabase
     .from("payments")
-    .select("amount, monthly_bills!inner(billing_month), clients!inner(search_text, area_id)");
+    .select("amount, monthly_bills!inner(billing_month, client_id, clients!inner(search_text, area_id))");
   query = applyPaymentFilters(query, filters);
   const { data, error } = await query;
   if (error) throw error;
@@ -103,13 +133,15 @@ function applyPaymentFilters<T extends { eq: any; gte: any; lte: any; is: any; i
   if (filters.from) q = q.gte("payment_date", filters.from);
   if (filters.to) q = q.lte("payment_date", filters.to);
   if (filters.collectorId) q = q.eq("collected_by", filters.collectorId);
-  if (filters.clientId) q = q.eq("client_id", filters.clientId);
+  // The client lives on the bill now, so every client-shaped filter goes one
+  // level deeper than it used to.
+  if (filters.clientId) q = q.eq("monthly_bills.client_id", filters.clientId);
   if (filters.method) q = q.eq("payment_method", filters.method);
   if (filters.billingMonth) q = q.eq("monthly_bills.billing_month", filters.billingMonth);
   if (filters.search?.trim()) {
-    q = q.ilike("clients.search_text", `%${escapeLike(filters.search.trim())}%`);
+    q = q.ilike("monthly_bills.clients.search_text", `%${escapeLike(filters.search.trim())}%`);
   }
-  if (filters.areaId) q = q.eq("clients.area_id", filters.areaId);
+  if (filters.areaId) q = q.eq("monthly_bills.clients.area_id", filters.areaId);
   return q as T;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -120,20 +152,44 @@ export type ReceiptData = Payment & {
   collector: Pick<Profile, "id" | "full_name"> | null;
 };
 
+/** Same nesting as PAYMENT_SELECT, with the extra bill figures a receipt prints. */
+type NestedReceiptRow = Omit<ReceiptData, "clients" | "monthly_bills"> & {
+  monthly_bills:
+    | (Pick<MonthlyBill, "id" | "billing_month" | "bill_amount" | "paid_amount" | "due_amount"> & {
+        clients: Pick<Client, "id" | "name" | "client_code" | "phone" | "address"> | null;
+      })
+    | null;
+};
+
 export async function getPaymentReceipt(paymentId: string): Promise<ReceiptData | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("payments")
     .select(
-      "*, clients(id, name, client_code, phone, address), " +
-        "monthly_bills(id, billing_month, bill_amount, paid_amount, due_amount), " +
+      "*, monthly_bills(id, billing_month, bill_amount, paid_amount, due_amount, " +
+        "clients(id, name, client_code, phone, address)), " +
         "collector:profiles!payments_collected_by_fkey(id, full_name)",
     )
     .eq("id", paymentId)
     .maybeSingle()
-    .overrideTypes<ReceiptData, { merge: false }>();
+    .overrideTypes<NestedReceiptRow, { merge: false }>();
   if (error) throw error;
-  return data;
+  if (!data) return null;
+
+  const bill = data.monthly_bills;
+  return {
+    ...data,
+    clients: bill?.clients ?? null,
+    monthly_bills: bill
+      ? {
+          id: bill.id,
+          billing_month: bill.billing_month,
+          bill_amount: bill.bill_amount,
+          paid_amount: bill.paid_amount,
+          due_amount: bill.due_amount,
+        }
+      : null,
+  };
 }
 
 /**

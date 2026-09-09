@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { saveClientAction } from "@/lib/actions/clients";
 import { dhakaToday, formatCurrency } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { Area, Client } from "@/types/database";
+import type { Area, ClientWithRate } from "@/types/database";
 
 /** Mirrors clientSchema, minus the transforms - RHF works with raw strings. */
 const formSchema = z.object({
@@ -55,7 +55,7 @@ export function ClientForm({
   suggestedCode,
   areas = [],
 }: {
-  client?: Client;
+  client?: ClientWithRate;
   /** Pre-filled next code when creating, e.g. C-0007. */
   suggestedCode?: string;
   /** Active areas to choose from (spec section 19). */

@@ -4,9 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { dhakaCurrentMonth } from "@/lib/format";
 import type {
   BillStatus,
-  Client,
   ClientStatus,
   ClientWithArea,
+  ClientWithRate,
   MonthlyBill,
   Payment,
   Profile,
@@ -28,7 +28,7 @@ export interface ClientListParams {
 }
 
 export interface ClientListResult {
-  clients: Client[];
+  clients: ClientWithRate[];
   total: number;
   page: number;
   pageCount: number;
@@ -40,9 +40,11 @@ export async function listClients(params: ClientListParams = {}): Promise<Client
   const pageSize = params.pageSize ?? PAGE_SIZE;
   const from = (page - 1) * pageSize;
 
+  // `monthly_bill` is a PostgREST computed field now, not a column, so "*"
+  // does not include it - it has to be named. See migration 0008.
   let query = supabase
     .from("clients")
-    .select("*", { count: "exact" })
+    .select("*, monthly_bill", { count: "exact" })
     .order("name", { ascending: true })
     .range(from, from + pageSize - 1);
 
@@ -59,7 +61,7 @@ export async function listClients(params: ClientListParams = {}): Promise<Client
     query = query.ilike("search_text", `%${escapeLike(search)}%`);
   }
 
-  const { data, error, count } = await query;
+  const { data, error, count } = await query.overrideTypes<ClientWithRate[], { merge: false }>();
   if (error) throw error;
 
   const total = count ?? 0;
@@ -75,7 +77,7 @@ export async function getClient(id: string): Promise<ClientWithArea | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("*, areas(id, name)")
+    .select("*, monthly_bill, areas(id, name)")
     .eq("id", id)
     .maybeSingle()
     .overrideTypes<ClientWithArea, { merge: false }>();
@@ -121,12 +123,15 @@ export type ClientPayment = Payment & {
  */
 export async function getClientPayments(clientId: string, limit = 50): Promise<ClientPayment[]> {
   const supabase = await createClient();
+  // payments carries no client_id (0008) - the client is reached through the
+  // bill, so the filter sits on the embedded row and the embed must be !inner
+  // for it to apply.
   const { data, error } = await supabase
     .from("payments")
     .select(
-      "*, collector:profiles!payments_collected_by_fkey(id, full_name), monthly_bills(billing_month)",
+      "*, collector:profiles!payments_collected_by_fkey(id, full_name), monthly_bills!inner(billing_month, client_id)",
     )
-    .eq("client_id", clientId)
+    .eq("monthly_bills.client_id", clientId)
     .order("payment_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit)

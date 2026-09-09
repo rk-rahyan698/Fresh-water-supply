@@ -1,6 +1,25 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /**
+   * Pin the workspace root to this directory.
+   *
+   * Turbopack infers the root by walking up looking for a lockfile. A stray
+   * package-lock.json anywhere above the project - easy to create by running
+   * `npm install` in a home directory once - makes it pick that directory
+   * instead, and every build then prints
+   *
+   *   Warning: Next.js ignored package-lock.json in <parent> because it is
+   *   outside the current Git repository
+   *
+   * Setting it explicitly makes the build behave the same on a laptop as it
+   * does on Vercel, where the repo root is unambiguous.
+   */
+  turbopack: {
+    root: path.join(import.meta.dirname, "."),
+  },
+
   /**
    * Hosts allowed to load /_next/* dev resources from another origin.
    *

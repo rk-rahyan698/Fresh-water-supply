@@ -66,7 +66,7 @@ export function PaymentsTable({
             <MobileCard key={payment.id} className={voided ? "bg-danger-soft/25" : undefined}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <Link
-                  href={`${clientBasePath}/${payment.client_id}`}
+                  href={`${clientBasePath}/${payment.clients?.id ?? ""}`}
                   className="min-w-0 text-sm font-medium text-brand-700"
                 >
                   <span className="block truncate">{payment.clients?.name ?? "-"}</span>
@@ -147,7 +147,7 @@ export function PaymentsTable({
                   <TD className="whitespace-nowrap">{formatDate(payment.payment_date)}</TD>
                   <TD>
                     <Link
-                      href={`${clientBasePath}/${payment.client_id}`}
+                      href={`${clientBasePath}/${payment.clients?.id ?? ""}`}
                       className="font-medium text-brand-700 hover:underline"
                     >
                       {payment.clients?.name ?? "-"}

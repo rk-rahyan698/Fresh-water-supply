@@ -7,7 +7,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { Client } from "@/types/database";
+import type { ClientWithRate } from "@/types/database";
 
 /**
  * Client list, rendered as tappable cards on phones and as a table from `sm`
@@ -22,7 +22,7 @@ export function ClientList({
   searching,
   emptyAction,
 }: {
-  clients: Client[];
+  clients: ClientWithRate[];
   /** "/clients" for admins, "/my/clients" for collectors. */
   basePath: string;
   page: number;

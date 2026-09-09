@@ -10,7 +10,7 @@ import { BillFinancialSummary } from "@/components/bills/bill-summary";
 import { BillAdjustmentButton } from "@/components/bills/bill-adjustment-dialog";
 import { formatCurrency, formatDate, formatMonth, formatReceiptNo } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { Client, MonthlyBill } from "@/types/database";
+import type { Client, ClientWithRate, MonthlyBill } from "@/types/database";
 import type { ClientPayment } from "@/lib/queries/clients";
 
 /* -------------------------------------------------------------------------- */
@@ -23,7 +23,7 @@ export function ClientSummaryCard({
   actions,
   areaName,
 }: {
-  client: Client;
+  client: ClientWithRate;
   outstanding: number;
   actions?: React.ReactNode;
   /** Area label for the profile header (spec sections 3, 25). */

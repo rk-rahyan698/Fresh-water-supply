@@ -98,7 +98,6 @@ export interface Database {
           name: string;
           phone: string | null;
           address: string | null;
-          monthly_bill: number;
           start_date: string;
           status: ClientStatus;
           notes: string | null;
@@ -113,7 +112,6 @@ export interface Database {
           name: string;
           phone?: string | null;
           address?: string | null;
-          monthly_bill?: number;
           start_date?: string;
           status?: ClientStatus;
           notes?: string | null;
@@ -124,7 +122,6 @@ export interface Database {
           name?: string;
           phone?: string | null;
           address?: string | null;
-          monthly_bill?: number;
           start_date?: string;
           status?: ClientStatus;
           notes?: string | null;
@@ -192,7 +189,6 @@ export interface Database {
         Row: {
           id: string;
           receipt_no: number;
-          client_id: string;
           monthly_bill_id: string;
           amount: number;
           payment_date: string;
@@ -207,13 +203,6 @@ export interface Database {
         Insert: never;
         Update: never;
         Relationships: [
-          {
-            foreignKeyName: "payments_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
-          },
           {
             foreignKeyName: "payments_monthly_bill_id_fkey";
             columns: ["monthly_bill_id"];
@@ -452,6 +441,10 @@ export interface Database {
         Args: { p_client_id: string; p_billing_month: string };
         Returns: number;
       };
+      client_current_rate: {
+        Args: { p_client_id: string };
+        Returns: number;
+      };
       client_bill_years: {
         Args: { p_client_id: string };
         Returns: { bill_year: number; bill_count: number }[];
@@ -593,8 +586,21 @@ export type Payment = Tables["payments"]["Row"];
 export type CashSubmission = Tables["cash_submissions"]["Row"];
 export type AuditLog = Tables["audit_logs"]["Row"];
 
-/** A client joined with its area. */
-export type ClientWithArea = Client & {
+/**
+ * A client plus the rate in force this month.
+ *
+ * `monthly_bill` is no longer a column - it is derived from
+ * client_rate_history and served by a PostgREST computed field of the same
+ * name, so it has to be asked for explicitly: `.select("*, monthly_bill")`.
+ * Anything that only does `.select("*")` gets a plain `Client` and, correctly,
+ * no rate.
+ */
+export type ClientWithRate = Client & {
+  monthly_bill: number;
+};
+
+/** A client joined with its area, plus this month's rate. */
+export type ClientWithArea = ClientWithRate & {
   areas: Pick<Area, "id" | "name"> | null;
 };
 

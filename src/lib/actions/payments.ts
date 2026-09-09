@@ -100,8 +100,16 @@ export async function voidPaymentAction(_prev: VoidState, formData: FormData): P
 
   if (error) return actionError(error);
 
+  // A payment no longer carries its own client_id (migration 0008) - the bill
+  // it settles is the only place that fact lives, so ask the bill.
   const payment = data as unknown as Payment;
-  revalidateMoney(payment.client_id);
+  const { data: bill } = await supabase
+    .from("monthly_bills")
+    .select("client_id")
+    .eq("id", payment.monthly_bill_id)
+    .maybeSingle();
+
+  revalidateMoney(bill?.client_id);
   return actionOk(null);
 }
 

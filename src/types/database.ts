@@ -535,6 +535,42 @@ export interface Database {
         Args: { p_year: number; p_area_id?: string | null; p_collector_id?: string | null };
         Returns: Json;
       };
+      /**
+       * Aggregates for the collections list. SECURITY INVOKER, so RLS scopes a
+       * collector to their own payments. See migration 0009.
+       */
+      payment_totals: {
+        Args: {
+          p_from?: string | null;
+          p_to?: string | null;
+          p_billing_month?: string | null;
+          p_collector_id?: string | null;
+          p_client_id?: string | null;
+          p_area_id?: string | null;
+          p_method?: PaymentMethod | null;
+          p_search?: string | null;
+          p_include_voided?: boolean;
+        };
+        Returns: Json;
+      };
+      bill_totals: {
+        Args: {
+          p_billing_month: string;
+          p_status?: BillStatus | null;
+          p_area_id?: string | null;
+          p_search?: string | null;
+        };
+        Returns: Json;
+      };
+      due_totals: {
+        Args: {
+          p_billing_month?: string | null;
+          p_area_id?: string | null;
+          p_min_due?: number | null;
+          p_search?: string | null;
+        };
+        Returns: Json;
+      };
       client_payment_history: {
         Args: { p_client_id: string; p_year?: number | null; p_limit?: number };
         Returns: {
@@ -696,4 +732,33 @@ export interface ClientFinancialSummary {
   collected_amount: number;
   outstanding: number;
   bill_count: number;
+}
+
+/** Shape returned by the payment_totals() RPC (migration 0009). */
+export interface PaymentTotals {
+  total_amount: number;
+  payment_count: number;
+}
+
+/** Shape returned by the bill_totals() RPC (migration 0009). */
+export interface BillTotalsRow {
+  original_amount: number;
+  adjustment_amount: number;
+  adjusted_amount: number;
+  paid_amount: number;
+  due_amount: number;
+  bill_count: number;
+}
+
+/**
+ * Shape returned by the due_totals() RPC (migration 0009).
+ *
+ * Describes the whole filtered set, not the row list the Due Report shows -
+ * that stays capped.
+ */
+export interface DueTotals {
+  total_due: number;
+  bill_count: number;
+  /** Distinct clients, not bills: eight unpaid months is still one client. */
+  client_count: number;
 }

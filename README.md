@@ -26,6 +26,7 @@ At any moment the owner can answer:
 - [Areas and rate changes](#areas-and-rate-changes)
 - [Financial integrity](#financial-integrity)
 - [Third normal form](#third-normal-form)
+- [Totals are counted in the database](#totals-are-counted-in-the-database)
 - [Security model](#security-model)
 - [Screens](#screens)
 - [Project structure](#project-structure)
@@ -81,6 +82,7 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0006_analytics.sql` | Year × month bill matrix, area summary, area-filtered aggregates |
 | `0007_collection_report.sql` | Collection matrix, headline summaries, per-client history |
 | `0008_normalize_3nf.sql` | Third normal form: removes two redundant columns |
+| `0009_server_side_totals.sql` | Aggregates the list totals in SQL instead of in the app |
 
 They are written to be safe to re-run, on an empty database and on one that
 already holds bills and payments.
@@ -433,6 +435,81 @@ to read `payments.client_id` still returns the same figures.
 
 ---
 
+## Totals are counted in the database
+
+Every list screen shows a total under the table. Those totals are computed by a
+SQL aggregate (`0009_server_side_totals.sql`), not by adding up the rows in the
+app — and the difference is not a matter of taste.
+
+The app used to select every matching row and sum the column in JavaScript:
+
+```ts
+.select("amount, monthly_bills!inner(...)")   // no range, no limit
+.reduce((sum, row) => sum + Number(row.amount), 0)
+```
+
+Supabase caps a response at the project's **Max rows** setting, which defaults
+to **1000**, and applies it *silently* — no error, no truncation flag. So past a
+thousand matching payments the total under the table was the sum of the first
+thousand, while the row count printed beside it (an exact `count`) stayed
+correct. A money figure that quietly stops growing is the worst kind of wrong in
+a ledger, and it was reachable from the **default view** of four screens, none
+of which apply a date filter until you pick one:
+
+| Screen | What it summed |
+|---|---|
+| `/collections` | every payment ever recorded |
+| `/dashboard` | the same sum, to render six rows |
+| `/my/collections` | every payment that collector ever took |
+| `/my/dashboard` | the same sum, to render eight rows |
+
+`sumBills()` had the same shape, bounded by client count rather than payment
+count — so it would have started understating the bills screen at a thousand
+clients.
+
+The **Due Report** had the same fault from a different direction: it caps its
+list at `.limit(500)` and then summed those rows. Capping the *list* is
+reasonable — nobody scrolls three thousand rows of a report. Capping the figure
+the table footer calls **Grand Total** is not, and the "Clients" tile was a
+`new Set()` over the same capped rows, so it undercounted too. The list is still
+capped; the three headline figures now come from `due_totals()` and describe
+every outstanding bill, and the table says so when it is showing you a subset.
+
+Now `payment_totals()`, `bill_totals()` and `due_totals()` do the arithmetic
+next to the data and return one row, so there is nothing for the cap to
+truncate.
+
+**Both are `SECURITY INVOKER`, deliberately.** They read `payments` as the
+caller, so the RLS policy from `0003` still applies —
+
+```sql
+payments_select: is_admin() or collected_by = auth.uid()
+```
+
+— and a collector aggregating "everything" gets only their own total. Making
+either function `SECURITY DEFINER` would hand every collector the whole
+business's collection figure; `verify:totals` asserts `prosecdef = false` on both
+so that change cannot be made quietly.
+
+Search terms are escaped in SQL by `like_escape()` rather than by the caller, so
+a client code containing `%` or `_` is matched literally and a bare `%` cannot
+turn into "match everything".
+
+### Checking it
+
+```bash
+npm run verify:totals
+```
+
+54 assertions. It seeds 1,350 payments — comfortably past the cap — and proves
+the aggregate is exact there, *and* reproduces the old bug by fetching the same
+rows under a `limit 1000` and showing the sum comes back understated. It then
+checks every filter against a direct sum, the metacharacter escaping, and that
+two different collectors each see only their own total while the admin sees the
+sum of both.
+
+---
+
 ## Security model
 
 Three independent layers — the app never relies on the frontend alone:
@@ -549,17 +626,29 @@ trust.
 | `npm run verify:analytics` | Areas, rate history, bill matrix and area reporting |
 | `npm run verify:reports` | Collection matrix, summaries and per-client history |
 | `npm run verify:3nf` | Apply 0008 to a *populated* schema: normalisation, no data loss |
+| `npm run verify:totals` | 0009: list and report totals are exact above the row caps, and still RLS-scoped |
 | `npm run verify:exports` | CSV and PDF generation |
 | `npm run verify:cleanup` | `remove-demo-data.sql` deletes demo rows and only demo rows |
 | `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
-| `npm run verify:all` | Every offline suite in sequence (266 assertions) |
+| `npm run verify:all` | Every offline suite in sequence (320 assertions) |
 | `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
-| `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write |
+| `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write — **currently non-functional, see below** |
 
 Everything from `verify:db` down to `verify:setup` runs entirely offline
 against PGlite — no Docker, no Supabase account, safe in CI. Only
 `verify:pages` and `verify:live` talk to a real project.
+
+> **`verify:live` does not currently run.** It signs in as
+> `abbu@watersupply.demo`, `mama@watersupply.demo` and `jamal@watersupply.demo`
+> — the seeded accounts that were removed when the seeder was dropped — so it
+> exits at the first `signIn()` on any real project. It is left in place rather
+> than deleted because the money rules it covers are all asserted offline
+> against PGlite by `verify:all` (320 assertions), which needs no account and no
+> network. To revive it, replace the three hardcoded addresses with a lookup
+> against `profiles` the way `scripts/verify-pages.mjs` already does — and note
+> that the payments it records are reversed by *voiding*, which leaves permanent
+> rows, because the database does not permit deletion.
 
 ---
 

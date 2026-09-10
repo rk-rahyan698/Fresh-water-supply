@@ -49,7 +49,7 @@ export default async function DueReportPage({
   const sort = (params.sort as DueSort) ?? "highest";
   const minDue = params.min ? Number(params.min) : undefined;
 
-  const [areas, { rows, totalDue, count }] = await Promise.all([
+  const [areas, { rows, totalDue, count, clientCount, truncated }] = await Promise.all([
     listAreas(),
     getDueReport({
       billingMonth,
@@ -60,7 +60,8 @@ export default async function DueReportPage({
     }),
   ]);
 
-  const clientsAffected = new Set(rows.map((row) => row.client_id)).size;
+  // clientCount comes from the aggregate, not from `rows` - the list is capped,
+  // and counting distinct clients across a capped list undercounts them.
 
   return (
     <>
@@ -111,7 +112,7 @@ export default async function DueReportPage({
       <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard label={t.report.totalDue} value={formatCurrency(totalDue)} tone="danger" />
         <StatCard label="Unpaid bills" value={count} />
-        <StatCard label="Clients" value={clientsAffected} />
+        <StatCard label="Clients" value={clientCount} />
       </div>
 
       <Card className="overflow-hidden">
@@ -234,6 +235,16 @@ export default async function DueReportPage({
                 </TFootRow>
               </Table>
             </TableWrap>
+
+            {/* The totals above describe every outstanding bill; the list is
+                capped. Say so, rather than letting the rows appear not to add
+                up to the grand total. */}
+            {truncated && (
+              <p className="border-t border-line px-4 py-3 text-xs text-ink-soft">
+                Showing the {rows.length} largest of {count} unpaid bills. The
+                totals above cover all {count}. Narrow the filters to see the rest.
+              </p>
+            )}
           </>
         )}
       </Card>

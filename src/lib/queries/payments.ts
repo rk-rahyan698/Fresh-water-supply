@@ -4,12 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { escapeLike } from "./clients";
 import type {
   BillStatus,
+  BillTotalsRow,
   CashSubmission,
   Client,
   MonthlyBill,
   Payment,
   PaymentDetail,
   PaymentMethod,
+  PaymentTotals,
   Profile,
 } from "@/types/database";
 
@@ -109,21 +111,40 @@ export async function listPayments(filters: PaymentFilters = {}): Promise<Paymen
 /**
  * Total for the *whole* filtered set, not just the page on screen - the owner
  * needs the real number under the table.
+ *
+ * Aggregated in the database (migration 0009), not by summing the rows here.
+ * Selecting every match and adding the column up in JavaScript looked
+ * equivalent and was not: Supabase caps a response at the project's "Max rows"
+ * setting - 1000 by default - silently, so past a thousand payments this
+ * returned the sum of the first thousand while the count beside it stayed
+ * correct. The default view of /collections and both dashboards apply no date
+ * filter, so they were all reachable.
+ *
+ * payment_totals() is SECURITY INVOKER, so RLS still scopes a collector to
+ * their own payments exactly as the old query did.
  */
 export async function sumPayments(filters: PaymentFilters = {}): Promise<number> {
   const supabase = await createClient();
-  let query = supabase
-    .from("payments")
-    .select("amount, monthly_bills!inner(billing_month, client_id, clients!inner(search_text, area_id))");
-  query = applyPaymentFilters(query, filters);
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc("payment_totals", {
+    p_from: filters.from ?? null,
+    p_to: filters.to ?? null,
+    p_billing_month: filters.billingMonth ?? null,
+    p_collector_id: filters.collectorId ?? null,
+    p_client_id: filters.clientId ?? null,
+    p_area_id: filters.areaId ?? null,
+    p_method: filters.method ?? null,
+    // Raw, not escaped: like_escape() inside the function owns that, so a
+    // client code containing % or _ cannot be double-escaped.
+    p_search: filters.search?.trim() || null,
+    p_include_voided: filters.includeVoided ?? false,
+  });
   if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + Number(row.amount), 0);
+  return Number((data as PaymentTotals | null)?.total_amount ?? 0);
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- one narrow shim: the
-   PostgREST builder generic differs between select() shapes, and this helper is
-   deliberately shared by both the paged query and the sum query. */
+   PostgREST builder generic differs between select() shapes, and this helper
+   has to work against whichever one the paged query is built from. */
 function applyPaymentFilters<T extends { eq: any; gte: any; lte: any; is: any; ilike: any }>(
   query: T,
   filters: PaymentFilters,
@@ -292,39 +313,33 @@ export async function listBills(filters: BillFilters): Promise<BillListResult> {
   };
 }
 
+/**
+ * Month totals for the bills screen, aggregated in the database (0009).
+ *
+ * Same reason as sumPayments(): this used to select every bill for the month
+ * and add the columns up here, which the API row cap truncates once the
+ * business has more than a thousand clients - understating every figure on the
+ * screen while the bill count stayed right.
+ */
 export async function sumBills(filters: BillFilters): Promise<BillTotals> {
   const supabase = await createClient();
-  let query = supabase
-    .from("monthly_bills")
-    .select(
-      "bill_amount, adjustment_amount, adjusted_amount, paid_amount, due_amount, clients!inner(search_text, area_id)",
-    )
-    .eq("billing_month", filters.billingMonth);
-
-  if (filters.status && filters.status !== "all") {
-    query = query.eq("status", filters.status);
-  }
-  if (filters.areaId) {
-    query = query.eq("clients.area_id", filters.areaId);
-  }
-  if (filters.search?.trim()) {
-    query = query.ilike("clients.search_text", `%${escapeLike(filters.search.trim())}%`);
-  }
-
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc("bill_totals", {
+    p_billing_month: filters.billingMonth,
+    p_status: filters.status && filters.status !== "all" ? filters.status : null,
+    p_area_id: filters.areaId ?? null,
+    p_search: filters.search?.trim() || null,
+  });
   if (error) throw error;
 
-  return (data ?? []).reduce<BillTotals>(
-    (acc, row) => ({
-      original: acc.original + Number(row.bill_amount),
-      adjustment: acc.adjustment + Number(row.adjustment_amount),
-      // `billed` is the ADJUSTED total, so paid + due always reconciles to it.
-      billed: acc.billed + Number(row.adjusted_amount),
-      paid: acc.paid + Number(row.paid_amount),
-      due: acc.due + Number(row.due_amount),
-    }),
-    { original: 0, adjustment: 0, billed: 0, paid: 0, due: 0 },
-  );
+  const totals = data as BillTotalsRow | null;
+  return {
+    original: Number(totals?.original_amount ?? 0),
+    adjustment: Number(totals?.adjustment_amount ?? 0),
+    // `billed` is the ADJUSTED total, so paid + due always reconciles to it.
+    billed: Number(totals?.adjusted_amount ?? 0),
+    paid: Number(totals?.paid_amount ?? 0),
+    due: Number(totals?.due_amount ?? 0),
+  };
 }
 
 /* -------------------------------------------------------------------------- */

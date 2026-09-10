@@ -7,6 +7,7 @@ import type {
   BillWithClient,
   CollectorStats,
   DashboardSummary,
+  DueTotals,
   Profile,
 } from "@/types/database";
 
@@ -189,9 +190,14 @@ export interface DueReportFilters {
 }
 
 export interface DueReportResult {
+  /** Capped at `limit` - a report table, not the whole ledger. */
   rows: BillWithClient[];
+  /** The figures below describe the WHOLE filtered set, not just `rows`. */
   totalDue: number;
   count: number;
+  clientCount: number;
+  /** True when there is more outstanding than the list is showing. */
+  truncated: boolean;
 }
 
 export async function getDueReport(filters: DueReportFilters = {}): Promise<DueReportResult> {
@@ -226,11 +232,29 @@ export async function getDueReport(filters: DueReportFilters = {}): Promise<DueR
   const { data, error } = await query.overrideTypes<BillWithClient[], { merge: false }>();
   if (error) throw error;
 
+  // The headline figures come from an aggregate over the whole filtered set,
+  // not from the rows above. Summing `rows` would cap the "Grand Total" at the
+  // 500 largest bills and silently understate everything once a business has
+  // more outstanding than that. See migration 0009.
+  const { data: totals, error: totalsError } = await supabase.rpc("due_totals", {
+    p_billing_month:
+      filters.billingMonth && filters.billingMonth !== "all" ? filters.billingMonth : null,
+    p_area_id: filters.areaId ?? null,
+    p_min_due: filters.minDue && filters.minDue > 0 ? filters.minDue : null,
+    p_search: filters.search?.trim() || null,
+  });
+  if (totalsError) throw totalsError;
+
   const rows = data ?? [];
+  const agg = totals as DueTotals | null;
+  const count = Number(agg?.bill_count ?? 0);
+
   return {
     rows,
-    totalDue: rows.reduce((sum, row) => sum + Number(row.due_amount), 0),
-    count: rows.length,
+    totalDue: Number(agg?.total_due ?? 0),
+    count,
+    clientCount: Number(agg?.client_count ?? 0),
+    truncated: count > rows.length,
   };
 }
 

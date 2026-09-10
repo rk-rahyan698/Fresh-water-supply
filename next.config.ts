@@ -30,11 +30,17 @@ const nextConfig: NextConfig = {
    * forms fall back to a native GET - so "Add client" reloads the page with
    * the fields in the query string instead of saving anything.
    *
-   * Add whatever address your machine shows next to "Network:" when
-   * `npm run dev` starts. Development only - it has no effect on a build or
-   * on Vercel.
+   * This used to pin a single address, which went stale the moment DHCP handed
+   * the laptop a different one - and the symptom is the silent hydration
+   * failure described above, not an error that names the origin. Matching the
+   * usual private ranges by wildcard instead means it keeps working after a
+   * reboot or a move to another network.
+   *
+   * Development only - it has no effect on a build or on Vercel. If your router
+   * uses a range not listed here, check the address next to "Network:" when
+   * `npm run dev` starts and add its prefix.
    */
-  allowedDevOrigins: ["192.168.1.91"],
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "172.16.*.*"],
 };
 
 export default nextConfig;

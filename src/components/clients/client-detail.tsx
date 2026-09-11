@@ -134,6 +134,7 @@ export function CurrentBillCard({
   bill,
   billingMonth,
   canCollect,
+  unpaidBills,
   adminAction,
   adjustmentAction,
   approvedBy,
@@ -142,11 +143,40 @@ export function CurrentBillCard({
   bill: MonthlyBill | null;
   billingMonth: string;
   canCollect: boolean;
+  /**
+   * Every bill this client still owes on, oldest first.
+   *
+   * Collection is offered across all of them, not just `bill`: a client who
+   * owes three months can pay this month and part of last month in one go,
+   * and a client whose current month is paid can still clear older arrears.
+   */
+  unpaidBills: MonthlyBill[];
   adminAction?: React.ReactNode;
   /** Admin-only "Add adjustment" control. */
   adjustmentAction?: React.ReactNode;
   approvedBy?: string | null;
 }) {
+  const olderUnpaid = unpaidBills.filter((b) => b.billing_month !== billingMonth);
+  const olderDue = olderUnpaid.reduce((sum, b) => sum + Number(b.due_amount), 0);
+
+  const collect = canCollect && unpaidBills.length > 0 && (
+    <CollectPaymentButton
+      clientId={client.id}
+      clientName={client.name}
+      bills={unpaidBills}
+      size="lg"
+      fullWidth
+    />
+  );
+
+  // Arrears are easy to miss under a bill that looks settled - say so.
+  const arrearsNote = olderUnpaid.length > 0 && (
+    <p className="rounded-xl bg-danger-soft/40 px-3 py-2 text-sm text-danger">
+      {olderUnpaid.length} earlier {olderUnpaid.length === 1 ? "month" : "months"} unpaid ·{" "}
+      <strong className="tnum">{formatCurrency(olderDue)}</strong>
+    </p>
+  );
+
   if (!bill) {
     return (
       <Card>
@@ -156,6 +186,12 @@ export function CurrentBillCard({
           description={adminAction ? undefined : t.bill.askAdmin}
           action={adminAction}
         />
+        {(arrearsNote || collect) && (
+          <div className="space-y-2 border-t border-line px-4 py-4 sm:px-5">
+            {arrearsNote}
+            {collect}
+          </div>
+        )}
       </Card>
     );
   }
@@ -172,15 +208,8 @@ export function CurrentBillCard({
         <BillFinancialSummary bill={bill} approvedBy={approvedBy} />
 
         <div className="mt-4 space-y-2">
-          {canCollect && (
-            <CollectPaymentButton
-              clientId={client.id}
-              clientName={client.name}
-              bill={bill}
-              size="lg"
-              fullWidth
-            />
-          )}
+          {arrearsNote}
+          {collect}
           {adjustmentAction}
         </div>
       </div>
@@ -272,7 +301,7 @@ export function BillHistoryCard({
                           <CollectPaymentButton
                             clientId={client.id}
                             clientName={client.name}
-                            bill={bill}
+                            bills={[bill]}
                             size="sm"
                           />
                         )}

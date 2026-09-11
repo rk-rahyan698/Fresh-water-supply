@@ -29,6 +29,7 @@ import {
   getClientOutstanding,
   getClientPayments,
   getClientRateHistory,
+  getClientUnpaidBills,
 } from "@/lib/queries/clients";
 import { listAreas } from "@/lib/queries/areas";
 import { dhakaCurrentMonth, formatCurrency, formatMonth } from "@/lib/format";
@@ -67,13 +68,14 @@ export default async function AdminClientDetailPage({
   const windowYears = [endYear - 2, endYear - 1, endYear].filter((y) => years.includes(y));
   const columns = windowYears.length > 0 ? windowYears : [endYear];
 
-  const [bills, payments, outstanding, matrix, areas, rates] = await Promise.all([
+  const [bills, payments, outstanding, matrix, areas, rates, unpaidBills] = await Promise.all([
     getClientBills(id, 12),
     getClientPayments(id),
     getClientOutstanding(id),
     getClientBillMatrix(id, columns[0], columns[columns.length - 1]),
     listAreas(false),
     getClientRateHistory(id),
+    getClientUnpaidBills(id),
   ]);
 
   const currentBill = bills.find((bill) => bill.billing_month === currentMonth) ?? null;
@@ -114,6 +116,14 @@ export default async function AdminClientDetailPage({
               clientId={client.id}
               clientName={client.name}
               currentRate={Number(client.monthly_bill)}
+              currentMonthBill={
+                currentBill
+                  ? {
+                      billAmount: Number(currentBill.bill_amount),
+                      paidAmount: Number(currentBill.paid_amount),
+                    }
+                  : null
+              }
             />
             <ChangeAreaButton
               clientId={client.id}
@@ -141,6 +151,7 @@ export default async function AdminClientDetailPage({
           bill={currentBill}
           billingMonth={currentMonth}
           canCollect
+          unpaidBills={unpaidBills}
           approvedBy={currentBill?.adjuster?.full_name}
           adminAction={
             client.status === "active" ? (

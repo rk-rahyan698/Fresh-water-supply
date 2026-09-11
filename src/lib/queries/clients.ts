@@ -176,6 +176,26 @@ export async function getClientBillForMonth(
   return data;
 }
 
+/**
+ * Every bill this client still owes on, oldest first - what the collect dialog
+ * splits an amount across.
+ *
+ * Not getClientBills(): that stops at the newest 12, and the months it drops
+ * are precisely the oldest arrears, which oldest-first collection pays first.
+ * Bounded by the client's own unpaid months, so it stays small.
+ */
+export async function getClientUnpaidBills(clientId: string): Promise<MonthlyBill[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("monthly_bills")
+    .select("*")
+    .eq("client_id", clientId)
+    .gt("due_amount", 0)
+    .order("billing_month", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** Total still owed by a client across every month. */
 export async function getClientOutstanding(clientId: string): Promise<number> {
   const supabase = await createClient();

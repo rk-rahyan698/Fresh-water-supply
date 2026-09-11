@@ -218,6 +218,11 @@ export const en = {
     reasonPlaceholder: "e.g. Annual revision",
     scheduled: "Scheduled",
     appliesFrom: "Applies from",
+    // Re-billing a month that is already generated (migration 0010)
+    alsoThisMonth: "Also change this month's bill",
+    alreadyBilled: "This month is already billed at",
+    keepsThisMonth: "Unticked, this month keeps its current bill and the new amount starts with the next bill generated.",
+    alreadyCollected: "already collected stays recorded.",
   },
 
   payment: {
@@ -250,6 +255,23 @@ export const en = {
     previousPaid: "Previously paid",
     thisPayment: "This payment",
     remainingDue: "Remaining due",
+    // One amount across several unpaid months (migration 0010)
+    amountReceived: "Amount received",
+    totalDue: "Total due",
+    payAllDue: "Pay all due",
+    splitTitle: "How it is applied",
+    splitExplainer: "Oldest month first. Change any month if the client asked otherwise.",
+    editSplit: "Change split",
+    resetSplit: "Back to oldest first",
+    unpaidMonths: "unpaid months",
+    cleared: "cleared",
+    left: "left",
+    overTotalDue: "More than the total due of",
+    advanceNotAllowed: "Advance payments are not accepted.",
+    splitMismatch: "The months add up to",
+    nothingDue: "Nothing is due for this client.",
+    totalReceived: "Total received",
+    monthsPaid: "Months paid",
   },
 
   submission: {
@@ -371,6 +393,10 @@ export const en = {
     empty: "No payments recorded for this year and filter.",
     profile: "Profile",
     paymentsAction: "Payments",
+    monthlyBill: "Monthly bill",
+    monthlyBillNote:
+      "Monthly bill is the amount on each month's bill, by billing month. If it changed during the year, each amount is shown with the months it applied to.",
+    changed: "Changed",
   },
 
   clientPayments: {

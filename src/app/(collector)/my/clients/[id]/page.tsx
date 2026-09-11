@@ -13,6 +13,7 @@ import {
   getClientBills,
   getClientOutstanding,
   getClientPayments,
+  getClientUnpaidBills,
 } from "@/lib/queries/clients";
 import { dhakaCurrentMonth } from "@/lib/format";
 import { t } from "@/lib/i18n";
@@ -37,11 +38,12 @@ export default async function CollectorClientDetailPage({
   if (!client) notFound();
 
   const currentMonth = dhakaCurrentMonth();
-  const [bills, payments, outstanding] = await Promise.all([
+  const [bills, payments, outstanding, unpaidBills] = await Promise.all([
     getClientBills(id),
     // RLS scopes this to the signed-in collector's own payments.
     getClientPayments(id),
     getClientOutstanding(id),
+    getClientUnpaidBills(id),
   ]);
 
   const currentBill = bills.find((bill) => bill.billing_month === currentMonth) ?? null;
@@ -68,6 +70,7 @@ export default async function CollectorClientDetailPage({
           bill={currentBill}
           billingMonth={currentMonth}
           canCollect
+          unpaidBills={unpaidBills}
         />
 
         <BillHistoryCard client={client} bills={bills} canCollect />

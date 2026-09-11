@@ -4,7 +4,7 @@ import { Droplets, CheckCircle2 } from "lucide-react";
 import { ReceiptActions } from "@/components/payments/print-button";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
-import { getPaidBefore, getPaymentReceipt } from "@/lib/queries/payments";
+import { getCollectionReceipt, getPaymentReceipt, type ReceiptLine } from "@/lib/queries/payments";
 import { env } from "@/lib/env";
 import {
   formatCurrencyExact,
@@ -25,16 +25,20 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
   const payment = await getPaymentReceipt(id);
   if (!payment) notFound();
 
-  const billAmount = Number(payment.monthly_bills?.bill_amount ?? 0);
-  const thisPayment = Number(payment.amount);
+  // Every month this collection paid, with figures as they stood when it was
+  // recorded - a printed receipt must not change meaning when a later payment
+  // is recorded. An ordinary single payment is one line.
+  const lines = await getCollectionReceipt(id);
+  if (lines.length === 0) notFound();
 
-  // Figures as they stood at this transaction, not as they stand today - a
-  // printed receipt must not change meaning when a later payment is recorded.
-  const previouslyPaid = await getPaidBefore(payment.monthly_bill_id, payment.id);
-  const remainingDue = Math.max(billAmount - previouslyPaid - thisPayment, 0);
+  const valid = lines.filter((line) => !line.voided);
+  const allVoided = valid.length === 0;
+  const multi = lines.length > 1;
+  // Voided lines stay on the receipt, struck through, but are not money received.
+  const total = (allVoided ? lines : valid).reduce((sum, line) => sum + line.amount, 0);
+  const remaining = valid.reduce((sum, line) => sum + line.remainingDue, 0);
 
   const backHref = ctx.profile.role === "admin" ? "/collections" : "/my/collections";
-  const voided = payment.voided_at !== null;
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md px-3 py-5 sm:px-4">
@@ -50,57 +54,55 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           <p className="mt-0.5 text-xs text-ink-soft">{t.payment.receipt}</p>
         </div>
 
-        {voided && (
+        {allVoided && (
           <div className="border-b border-line bg-danger-soft px-5 py-3 text-center">
             <Badge tone="danger">{t.payment.voided}</Badge>
-            {payment.void_reason && (
-              <p className="mt-1.5 text-xs text-danger">{payment.void_reason}</p>
+            {lines[0].voidReason && (
+              <p className="mt-1.5 text-xs text-danger">{lines[0].voidReason}</p>
             )}
           </div>
         )}
 
         {/* The number that matters */}
         <div className="border-b border-line px-5 py-5 text-center">
-          <p className="text-xs tracking-wide text-ink-soft uppercase">{t.payment.thisPayment}</p>
+          <p className="text-xs tracking-wide text-ink-soft uppercase">
+            {multi ? t.payment.totalReceived : t.payment.thisPayment}
+          </p>
           <p
             className={`mt-1 text-3xl font-semibold tracking-tight ${
-              voided ? "text-ink-faint line-through" : "text-positive"
+              allVoided ? "text-ink-faint line-through" : "text-positive"
             }`}
           >
-            {formatCurrencyExact(thisPayment)}
+            {formatCurrencyExact(total)}
           </p>
-          {!voided && (
+          {!allVoided && (
             <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-positive">
               <CheckCircle2 className="size-3.5" />
-              Received
+              Received{multi ? ` · ${lines.length} months` : ""}
             </p>
           )}
         </div>
 
         {/* Details */}
         <dl className="divide-y divide-line px-5">
-          <Row label={t.payment.receiptNo} value={formatReceiptNo(payment.receipt_no)} mono />
+          <Row
+            label={t.payment.receiptNo}
+            value={lines.map((line) => formatReceiptNo(line.receiptNo)).join(", ")}
+            mono
+          />
           <Row label={t.client.name} value={payment.clients?.name ?? "-"} />
           <Row label={t.client.code} value={payment.clients?.client_code ?? "-"} />
           {payment.clients?.phone && <Row label={t.client.phone} value={payment.clients.phone} />}
           {payment.clients?.address && (
             <Row label={t.client.address} value={payment.clients.address} />
           )}
-          <Row
-            label={t.bill.billingMonth}
-            value={
-              payment.monthly_bills ? formatMonth(payment.monthly_bills.billing_month) : "-"
-            }
-          />
-          <Row label={t.bill.amount} value={formatCurrencyExact(billAmount)} />
-          <Row label={t.payment.previousPaid} value={formatCurrencyExact(previouslyPaid)} />
-          <Row label={t.payment.thisPayment} value={formatCurrencyExact(thisPayment)} strong />
-          <Row
-            label={t.payment.remainingDue}
-            value={formatCurrencyExact(remainingDue)}
-            strong
-            tone={remainingDue > 0 ? "danger" : "positive"}
-          />
+
+          {multi ? (
+            <MonthBreakdown lines={lines} remaining={remaining} />
+          ) : (
+            <SingleLine line={lines[0]} />
+          )}
+
           <Row label={t.payment.method} value={methodLabel(payment.payment_method)} />
           <Row label={t.payment.date} value={formatDate(payment.payment_date)} />
           <Row label={t.payment.collectedBy} value={payment.collector?.full_name ?? "-"} />
@@ -118,6 +120,87 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
     </main>
+  );
+}
+
+/** One month: the full ladder, with the adjustment when there is one. */
+function SingleLine({ line }: { line: ReceiptLine }) {
+  return (
+    <>
+      <Row label={t.bill.billingMonth} value={formatMonth(line.billingMonth)} />
+      {line.adjustmentAmount > 0 ? (
+        <>
+          <Row label={t.bill.originalBill} value={formatCurrencyExact(line.billAmount)} />
+          <Row label={t.bill.adjustment} value={`- ${formatCurrencyExact(line.adjustmentAmount)}`} />
+          <Row label={t.bill.adjustedBill} value={formatCurrencyExact(line.adjustedAmount)} />
+        </>
+      ) : (
+        <Row label={t.bill.amount} value={formatCurrencyExact(line.billAmount)} />
+      )}
+      <Row label={t.payment.previousPaid} value={formatCurrencyExact(line.previouslyPaid)} />
+      <Row label={t.payment.thisPayment} value={formatCurrencyExact(line.amount)} strong />
+      {!line.voided && (
+        <Row
+          label={t.payment.remainingDue}
+          value={formatCurrencyExact(line.remainingDue)}
+          strong
+          tone={line.remainingDue > 0 ? "danger" : "positive"}
+        />
+      )}
+    </>
+  );
+}
+
+/** Several months: one compact block each, then what is still owed on them. */
+function MonthBreakdown({ lines, remaining }: { lines: ReceiptLine[]; remaining: number }) {
+  return (
+    <>
+      <div className="py-2.5">
+        <dt className="mb-1.5 text-sm text-ink-soft">{t.payment.monthsPaid}</dt>
+        <dd>
+          <ul className="space-y-2">
+            {lines.map((line) => (
+              <li key={line.paymentId} className="rounded-lg bg-canvas px-3 py-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm font-medium text-ink">
+                    {formatMonth(line.billingMonth)}
+                    {line.voided && (
+                      <span className="ml-2 align-middle">
+                        <Badge tone="danger">{t.payment.voided}</Badge>
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`tnum text-sm font-semibold ${
+                      line.voided ? "text-ink-faint line-through" : "text-ink"
+                    }`}
+                  >
+                    {formatCurrencyExact(line.amount)}
+                  </span>
+                </div>
+                <p className="tnum mt-0.5 text-xs text-ink-soft">
+                  {t.bill.amount} {formatCurrencyExact(line.adjustedAmount)}
+                  {line.adjustmentAmount > 0 ? " (after adjustment)" : ""}
+                  {line.previouslyPaid > 0
+                    ? ` · paid before ${formatCurrencyExact(line.previouslyPaid)}`
+                    : ""}
+                  {!line.voided &&
+                    (line.remainingDue > 0
+                      ? ` · ${formatCurrencyExact(line.remainingDue)} ${t.payment.left}`
+                      : ` · ${t.payment.cleared}`)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </dd>
+      </div>
+      <Row
+        label={t.payment.remainingDue}
+        value={formatCurrencyExact(remaining)}
+        strong
+        tone={remaining > 0 ? "danger" : "positive"}
+      />
+    </>
   );
 }
 

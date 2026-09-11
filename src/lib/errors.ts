@@ -1,4 +1,4 @@
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatMonth } from "@/lib/format";
 
 /**
  * Turns database and auth errors into sentences a collector can act on.
@@ -58,6 +58,22 @@ const MESSAGES: Record<string, (detail: Detail) => string> = {
     `That area still has ${d ?? "some"} client(s). Move them elsewhere first, or just deactivate the area.`,
   RATE_EFFECTIVE_IN_PAST: () =>
     "A rate change can only take effect from the current month onwards - months already billed keep their amount.",
+
+  // Several months in one collection (0010). Detail is "YYYY-MM-01" or
+  // "YYYY-MM-01|due", so the message can say WHICH month is wrong.
+  COLLECTION_EMPTY: () => "Enter an amount to collect.",
+  COLLECTION_TOO_MANY: () => "Too many months in one payment.",
+  COLLECTION_DUPLICATE_MONTH: () => "The same month appears twice in this payment.",
+  COLLECTION_BILL_NOT_FOUND: (d) =>
+    `There is no bill for ${formatMonth(d)}. Generate it first. Nothing was recorded.`,
+  COLLECTION_BILL_PAID: (d) =>
+    `${formatMonth(d)} is already fully paid. Nothing was recorded - refresh and try again.`,
+  COLLECTION_EXCEEDS_DUE: (d) => {
+    const [month, due] = (d ?? "").split("|");
+    return `${formatMonth(month)} only has ${formatCurrency(Number(due))} due. Nothing was recorded - refresh and try again.`;
+  },
+  REBILL_ONLY_CURRENT_MONTH: () =>
+    "Only a change that starts this month can also update this month's bill.",
 
   CLIENT_NOT_FOUND: () => "Client not found.",
   CLIENT_INACTIVE: () => "This client is inactive. Activate them before creating a bill.",

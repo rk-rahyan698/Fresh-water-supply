@@ -571,6 +571,52 @@ export interface Database {
         };
         Returns: Json;
       };
+      /**
+       * One amount across several of a client's bills, atomically - one
+       * payment row per bill. See migration 0010.
+       */
+      record_collection: {
+        Args: {
+          p_client_id: string;
+          /** `[{ billing_month: "YYYY-MM-01", amount: 1000 }, ...]` */
+          p_allocations: Json;
+          p_payment_method?: PaymentMethod;
+          p_notes?: string | null;
+          p_payment_date?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"][];
+      };
+      collection_receipt: {
+        Args: { p_payment_id: string };
+        Returns: {
+          payment_id: string;
+          receipt_no: number;
+          billing_month: string;
+          bill_amount: number;
+          adjustment_amount: number;
+          adjusted_amount: number;
+          previously_paid: number;
+          amount: number;
+          remaining_due: number;
+          voided: boolean;
+          void_reason: string | null;
+        }[];
+      };
+      collection_bill_months: {
+        Args: { p_year: number; p_area_id?: string | null };
+        /** bill_amounts: 12 entries, January first, null where not billed. */
+        Returns: { client_id: string; bill_amounts: (number | null)[] }[];
+      };
+      change_client_rate: {
+        Args: {
+          p_client_id: string;
+          p_monthly_bill: number;
+          p_effective_from: string;
+          p_reason?: string | null;
+          p_update_current_bill?: boolean;
+        };
+        Returns: Json;
+      };
       client_payment_history: {
         Args: { p_client_id: string; p_year?: number | null; p_limit?: number };
         Returns: {

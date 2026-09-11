@@ -213,27 +213,50 @@ export async function getPaymentReceipt(paymentId: string): Promise<ReceiptData 
   };
 }
 
-/**
- * How much had been paid against this bill *before* the given payment.
- * Receipts show "previously paid" so the client can see the running total.
- */
-export async function getPaidBefore(billId: string, paymentId: string): Promise<number> {
-  const supabase = await createClient();
-  const { data: target, error: targetError } = await supabase
-    .from("payments")
-    .select("created_at")
-    .eq("id", paymentId)
-    .single();
-  if (targetError) throw targetError;
+export interface ReceiptLine {
+  paymentId: string;
+  receiptNo: number;
+  billingMonth: string;
+  billAmount: number;
+  adjustmentAmount: number;
+  /** What was owed on the bill: bill minus adjustment. */
+  adjustedAmount: number;
+  /** Paid on this bill before this line, by ANY collector. */
+  previouslyPaid: number;
+  amount: number;
+  remainingDue: number;
+  voided: boolean;
+  voidReason: string | null;
+}
 
-  const { data, error } = await supabase
-    .from("payments")
-    .select("amount")
-    .eq("monthly_bill_id", billId)
-    .is("voided_at", null)
-    .lt("created_at", target.created_at);
+/**
+ * Every line of the collection this payment belongs to - one per month - with
+ * figures as they stood when it was recorded. A single payment is one line.
+ *
+ * Computed by collection_receipt() (0010) rather than here. The arithmetic used
+ * to live in this file and was wrong twice over: it subtracted from the
+ * ORIGINAL bill, so a discounted bill paid in full printed a due, and it summed
+ * "previously paid" through RLS, so a collector's receipt silently left out
+ * every payment another collector had taken on the same bill.
+ */
+export async function getCollectionReceipt(paymentId: string): Promise<ReceiptLine[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("collection_receipt", { p_payment_id: paymentId });
   if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + Number(row.amount), 0);
+
+  return (data ?? []).map((row) => ({
+    paymentId: row.payment_id,
+    receiptNo: Number(row.receipt_no),
+    billingMonth: row.billing_month,
+    billAmount: Number(row.bill_amount),
+    adjustmentAmount: Number(row.adjustment_amount),
+    adjustedAmount: Number(row.adjusted_amount),
+    previouslyPaid: Number(row.previously_paid),
+    amount: Number(row.amount),
+    remainingDue: Number(row.remaining_due),
+    voided: row.voided,
+    voidReason: row.void_reason,
+  }));
 }
 
 /* -------------------------------------------------------------------------- */

@@ -96,7 +96,12 @@ export async function setClientAreaAction(
   return actionOk(null);
 }
 
-type RateState = ActionResult<{ effectiveFrom: string; amount: number }> | null;
+type RateState = ActionResult<{
+  effectiveFrom: string;
+  amount: number;
+  /** True when this month's already-generated bill was changed as well. */
+  rebilled: boolean;
+}> | null;
 
 /**
  * Schedules a new monthly rate from a given month onwards.
@@ -118,20 +123,36 @@ export async function setClientRateAction(_prev: RateState, formData: FormData):
     return actionError("Please check the form.", fieldErrorsFrom(parsed.error));
   }
 
+  // change_client_rate() (0010) is set_client_rate() plus, when asked, the
+  // current month's bill - in one transaction, so a mid-month increase moves
+  // the rate and this month's bill together or not at all.
+  const updateCurrentBill = formData.get("update_current_bill") === "true";
+
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_client_rate", {
+  const { data, error } = await supabase.rpc("change_client_rate", {
     p_client_id: parsed.data.client_id,
     p_monthly_bill: parsed.data.monthly_bill,
     p_effective_from: parsed.data.effective_from,
     p_reason: parsed.data.reason ?? null,
+    p_update_current_bill: updateCurrentBill,
   });
 
   if (error) return actionError(error);
 
+  const rebilled = Boolean((data as { bill?: unknown } | null)?.bill);
+
   revalidateAreas(parsed.data.client_id);
+  if (rebilled) {
+    // A bill amount moved, so every money view is stale, not just the rate.
+    revalidatePath("/collections");
+    revalidatePath("/reports/collections");
+    revalidatePath("/my/dashboard");
+    revalidatePath(`/clients/${parsed.data.client_id}/payments`);
+  }
   return actionOk({
     effectiveFrom: parsed.data.effective_from,
     amount: parsed.data.monthly_bill,
+    rebilled,
   });
 }
 

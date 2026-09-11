@@ -7,6 +7,7 @@ import { actionError, actionOk, type ActionResult } from "@/lib/errors";
 import {
   billAdjustmentSchema,
   billAmountSchema,
+  collectionSchema,
   generateBillsSchema,
   generateClientBillSchema,
   paymentSchema,
@@ -76,6 +77,61 @@ export async function recordPaymentAction(
   const payment = data as unknown as Payment;
   revalidateMoney(values.client_id);
   return actionOk({ paymentId: payment.id, receiptNo: payment.receipt_no });
+}
+
+/**
+ * One amount received across several unpaid months.
+ *
+ * The browser sends the split it showed the collector; the database writes it
+ * as one payment row per bill, all in one transaction (record_collection, 0010).
+ * If any month would be overpaid, nothing is recorded.
+ *
+ * Takes a plain object rather than FormData: the allocations are a list, and
+ * flattening them into form fields only to rebuild them here buys nothing.
+ */
+export async function recordCollectionAction(input: {
+  client_id: string;
+  allocations: { billing_month: string; amount: number }[];
+  payment_method: string;
+  payment_date?: string;
+  notes?: string;
+}): Promise<ActionResult<{ paymentId: string; count: number; total: number }>> {
+  // Any active user may collect; collected_by is stamped from the JWT inside
+  // record_payment(), never taken from here.
+  await requireUser();
+
+  const parsed = collectionSchema.safeParse({
+    ...input,
+    payment_date: input.payment_date || undefined,
+    notes: input.notes ?? "",
+  });
+  if (!parsed.success) {
+    return actionError("Please check the payment.", fieldErrorsFrom(parsed.error));
+  }
+
+  const values = parsed.data;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("record_collection", {
+    p_client_id: values.client_id,
+    p_allocations: values.allocations,
+    p_payment_method: values.payment_method,
+    p_notes: values.notes ?? null,
+    p_payment_date: values.payment_date ?? null,
+  });
+
+  if (error) return actionError(error);
+
+  const payments = (data ?? []) as Payment[];
+  if (payments.length === 0) return actionError("Nothing was recorded. Please try again.");
+
+  revalidateMoney(values.client_id);
+  revalidatePath("/reports/collections");
+  return actionOk({
+    // Rows come back oldest month first; any of them opens the combined receipt.
+    paymentId: payments[0].id,
+    count: payments.length,
+    total: payments.reduce((sum, p) => sum + Number(p.amount), 0),
+  });
 }
 
 type VoidState = ActionResult<null> | null;

@@ -15,6 +15,32 @@ export const paymentSchema = z.object({
 export type PaymentInput = z.input<typeof paymentSchema>;
 export type PaymentValues = z.output<typeof paymentSchema>;
 
+/**
+ * One amount received, split across several of a client's bills.
+ *
+ * Re-validated here because the split arrives from the browser. The database
+ * checks every month again under a row lock (record_collection), so this is
+ * about clear messages, not trust.
+ */
+export const collectionSchema = z
+  .object({
+    client_id: uuid,
+    allocations: z
+      .array(z.object({ billing_month: monthString, amount: moneyAmount }))
+      .min(1, "Enter an amount")
+      .max(120, "Too many months in one payment"),
+    payment_method: paymentMethodSchema.default("cash"),
+    payment_date: dateString.optional(),
+    notes: optionalText(300),
+  })
+  .refine(
+    (value) =>
+      new Set(value.allocations.map((a) => a.billing_month)).size === value.allocations.length,
+    { message: "Each month can only appear once", path: ["allocations"] },
+  );
+
+export type CollectionValues = z.output<typeof collectionSchema>;
+
 export const voidPaymentSchema = z.object({
   payment_id: uuid,
   reason: z

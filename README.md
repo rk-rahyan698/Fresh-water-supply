@@ -83,6 +83,7 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0007_collection_report.sql` | Collection matrix, headline summaries, per-client history |
 | `0008_normalize_3nf.sql` | Third normal form: removes two redundant columns |
 | `0009_server_side_totals.sql` | Aggregates the list totals in SQL instead of in the app |
+| `0010_multi_month_collection.sql` | One payment across several months, monthly bill per client in reports, mid-month rate changes, correct receipts |
 
 They are written to be safe to re-run, on an empty database and on one that
 already holds bills and payments.
@@ -171,10 +172,20 @@ at the rate effective for that month. Running it twice creates nothing extra —
 the `(client_id, billing_month)` unique constraint plus `ON CONFLICT DO NOTHING`
 guarantee one bill per client per month.
 
-**2. Payments.** A collector opens a client, sees the bill, taps *Collect
-payment*. Partial payments are supported and each one is a separate, permanent
-transaction. Overpayment is rejected. The bill's `paid_amount`, `due_amount` and
-`status` update themselves.
+**2. Payments.** A collector opens a client, taps *Collect payment*, and types
+the amount received. Partial payments are supported and each one is a separate,
+permanent transaction. Overpayment is rejected. The bill's `paid_amount`,
+`due_amount` and `status` update themselves.
+
+A client who owes several months can pay them in one go. The dialog lists every
+unpaid month and shows how the amount lands, **oldest month first** - owing
+July, August and September at ৳1,000 and paying ৳2,500 clears July and August
+and leaves ৳500 on September. *Change split* lets the collector enter the months
+the client asked for instead. It is recorded as one payment row per month (a
+payment still belongs to exactly one bill), written together by
+`record_collection()` in a single transaction: if any month would be overpaid,
+**no** month is recorded, and the error names the month. One receipt covers the
+whole collection.
 
 **3. Cash submission.** When a collector hands cash to the owner, the owner
 records it. `Unsubmitted = cash collected − cash submitted`, and the app will not
@@ -347,6 +358,24 @@ April onwards  ৳1,200   (scheduled, effective April)
 
 A rate can never be back-dated into a month that is already billed - the SQL
 function rejects it.
+
+**Raising a bill in the middle of a month.** A rate change never rewrites a
+generated bill on its own, so choosing *this month* after the month is billed
+used to leave this month at the old amount while the client's "Monthly bill"
+already showed the new one - and there was no screen to fix it. Now, when the
+change starts this month and this month is already billed, the dialog shows
+*Also change this month's bill* (ticked by default) with the effect spelled out.
+`change_client_rate()` moves the rate and the bill in one transaction; if the
+new amount would drop below what has already been collected, both are refused.
+Untick it and the new amount starts with the next bill generated.
+
+**Seeing it.** The Collection Report has a **Monthly bill** column built from
+what each month was *actually billed*, not from the rate table - so a rate
+raised in July reads `৳1,000 Jan–Jun · ৳1,200 Jul–Dec`, marked *Changed*, and a
+one-off discount is not mistaken for a rate change. The CSV carries it as a
+number plus a detail column; the PDF prints each amount on its own line. A
+client's own Payment History and Bill History PDFs add a *Monthly bill history*
+table whenever the amount changed.
 
 There is no second copy of the rate anywhere. There used to be:
 `clients.monthly_bill` held "the rate in force today", and nothing moved it
@@ -627,10 +656,11 @@ trust.
 | `npm run verify:reports` | Collection matrix, summaries and per-client history |
 | `npm run verify:3nf` | Apply 0008 to a *populated* schema: normalisation, no data loss |
 | `npm run verify:totals` | 0009: list and report totals are exact above the row caps, and still RLS-scoped |
+| `npm run verify:collection` | 0010: multi-month collection is atomic, receipts are right, rate changes reach bills, `setup.sql` re-runs |
 | `npm run verify:exports` | CSV and PDF generation |
 | `npm run verify:cleanup` | `remove-demo-data.sql` deletes demo rows and only demo rows |
 | `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
-| `npm run verify:all` | Every offline suite in sequence (320 assertions) |
+| `npm run verify:all` | Every offline suite in sequence (415 assertions) |
 | `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write — **currently non-functional, see below** |
@@ -644,7 +674,7 @@ against PGlite — no Docker, no Supabase account, safe in CI. Only
 > — the seeded accounts that were removed when the seeder was dropped — so it
 > exits at the first `signIn()` on any real project. It is left in place rather
 > than deleted because the money rules it covers are all asserted offline
-> against PGlite by `verify:all` (320 assertions), which needs no account and no
+> against PGlite by `verify:all` (415 assertions), which needs no account and no
 > network. To revive it, replace the three hardcoded addresses with a lookup
 > against `profiles` the way `scripts/verify-pages.mjs` already does — and note
 > that the payments it records are reversed by *voiding*, which leaves permanent

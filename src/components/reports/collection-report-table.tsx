@@ -16,6 +16,12 @@ import {
   pdfNumber,
   savePdf,
 } from "@/lib/export/pdf";
+import {
+  formatRanges,
+  isFlatFullYear,
+  summariseBillMonths,
+  type BillMonthsSummary,
+} from "@/lib/collection-math";
 import { formatCurrency } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { CollectionMatrixRow } from "@/lib/queries/collection-report";
@@ -35,6 +41,23 @@ export interface ReportContext {
   areaLabel: string;
   collectorLabel: string;
   businessName: string;
+}
+
+/**
+ * The monthly bill as plain text lines, for the exports.
+ *
+ *   one amount all year   -> []                     (the amount alone says it)
+ *   raised in July        -> ["1,000 Jan-Jun", "1,200 Jul-Dec"]
+ *   started in May        -> ["800 May-Dec"]
+ *
+ * Built from what each month was actually billed, so a rate change mid-year,
+ * an edited month, or a client who joined part-way through all read correctly.
+ */
+function billDetailLines(summary: BillMonthsSummary): string[] {
+  if (summary.segments.length === 0 || isFlatFullYear(summary)) return [];
+  return summary.segments.map(
+    (segment) => `${pdfNumber(segment.amount)} ${formatRanges(segment.ranges, MONTHS_SHORT, "-")}`,
+  );
 }
 
 /**
@@ -60,6 +83,10 @@ export function CollectionReportTable({
     rows.reduce((sum, row) => sum + row.months[i], 0),
   );
   const grandTotal = rows.reduce((sum, row) => sum + row.yearTotal, 0);
+  // Summarised once per row; the screen, the CSV and the PDF all read this.
+  const billSummaries = new Map(
+    rows.map((row) => [row.clientId, summariseBillMonths(row.billMonths ?? [])]),
+  );
 
   const filenameParts = [
     "collection-report",
@@ -76,23 +103,34 @@ export function CollectionReportTable({
     setBusy("csv");
     try {
       // Accounting-friendly columns; 0 rather than blank (spec section 18).
+      // "Monthly Bill" stays a plain number so a spreadsheet can use it; the
+      // detail column spells out the months when the amount changed.
       const header = [
         "Client Code",
         "Client Name",
         "Area",
+        "Monthly Bill",
+        "Monthly Bill Detail",
         ...MONTHS_LONG,
         "Year Total",
       ];
-      const body = rows.map((row) => [
-        row.clientCode,
-        row.clientName,
-        row.areaName ?? "Unassigned",
-        ...row.months.map((v) => v.toFixed(2)),
-        row.yearTotal.toFixed(2),
-      ]);
+      const body = rows.map((row) => {
+        const bills = billSummaries.get(row.clientId)!;
+        return [
+          row.clientCode,
+          row.clientName,
+          row.areaName ?? "Unassigned",
+          bills.latest === null ? "" : bills.latest.toFixed(2),
+          billDetailLines(bills).join("; "),
+          ...row.months.map((v) => v.toFixed(2)),
+          row.yearTotal.toFixed(2),
+        ];
+      });
       const total = [
         "",
         "TOTAL",
+        "",
+        "",
         "",
         ...monthTotals.map((v) => v.toFixed(2)),
         grandTotal.toFixed(2),
@@ -118,7 +156,7 @@ export function CollectionReportTable({
       const pdf = createPdfDoc({
         businessName: context.businessName,
         title: t.collections.title,
-        subtitle: `Collections during ${context.year}, by the month the money was received`,
+        subtitle: `Collections during ${context.year}, by the month the money was received. Monthly bill is by billing month.`,
         orientation: "landscape",
         meta: [
           { label: "Year", value: String(context.year) },
@@ -143,16 +181,25 @@ export function CollectionReportTable({
       pdf.cursorY = afterSummary;
 
       addPdfTable(pdf, {
-        head: [["Client", "Area", ...MONTHS_SHORT, "Total"]],
-        body: rows.map((row) => [
-          `${row.clientName}\n${row.clientCode}`,
-          row.areaName ?? "Unassigned",
-          ...row.months.map((v) => (v === 0 ? "0" : pdfNumber(v))),
-          pdfNumber(row.yearTotal),
-        ]),
+        head: [["Client", "Area", "Monthly bill", ...MONTHS_SHORT, "Total"]],
+        body: rows.map((row) => {
+          const bills = billSummaries.get(row.clientId)!;
+          const detail = billDetailLines(bills);
+          return [
+            `${row.clientName}\n${row.clientCode}`,
+            row.areaName ?? "Unassigned",
+            // One amount all year prints as the amount. A change prints each
+            // amount on its own line with the months it applied to, so the
+            // row grows rather than the figure being wrong for half the year.
+            bills.latest === null ? "-" : detail.length > 0 ? detail.join("\n") : pdfNumber(bills.latest),
+            ...row.months.map((v) => (v === 0 ? "0" : pdfNumber(v))),
+            pdfNumber(row.yearTotal),
+          ];
+        }),
         foot: [
           [
             "TOTAL",
+            "",
             "",
             ...monthTotals.map((v) => pdfNumber(v)),
             pdfNumber(grandTotal),
@@ -161,11 +208,12 @@ export function CollectionReportTable({
         styles: { fontSize: 7, cellPadding: 3 },
         headStyles: { fontSize: 7 },
         columnStyles: {
-          0: { cellWidth: 92, halign: "left" },
-          1: { cellWidth: 58, halign: "left" },
-          14: { fontStyle: "bold" },
+          0: { cellWidth: 86, halign: "left" },
+          1: { cellWidth: 50, halign: "left" },
+          2: { cellWidth: 68 },
+          15: { fontStyle: "bold" },
         },
-        // Every month column right-aligned; numbers must line up.
+        // Monthly bill and every month column right-aligned; numbers line up.
         didParseCell: (data) => {
           if (data.column.index >= 2) data.cell.styles.halign = "right";
         },
@@ -219,7 +267,7 @@ export function CollectionReportTable({
         // Wide by nature: scrolls inside its own container, and the client
         // column stays pinned so a row stays identifiable while scrolling.
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-sm">
+          <table className="w-full min-w-[960px] border-collapse text-sm">
             <thead className="bg-canvas/70">
               <tr>
                 <th
@@ -227,6 +275,12 @@ export function CollectionReportTable({
                   className="sticky left-0 z-10 border-b border-line bg-canvas/95 px-3 py-2.5 text-left text-xs font-semibold tracking-wide text-ink-soft uppercase backdrop-blur"
                 >
                   {t.client.one}
+                </th>
+                <th
+                  scope="col"
+                  className="border-b border-line px-3 py-2.5 text-right text-xs font-semibold tracking-wide whitespace-nowrap text-ink-soft uppercase"
+                >
+                  {t.collections.monthlyBill}
                 </th>
                 {MONTHS_SHORT.map((month) => (
                   <th
@@ -260,6 +314,9 @@ export function CollectionReportTable({
                       {row.areaName ? ` · ${row.areaName}` : ""}
                     </span>
                   </th>
+                  <td className="border-r border-line/60 px-3 py-2 text-right align-top">
+                    <MonthlyBillCell summary={billSummaries.get(row.clientId)!} />
+                  </td>
                   {row.months.map((value, i) => (
                     <td
                       key={i}
@@ -284,6 +341,8 @@ export function CollectionReportTable({
                 >
                   {t.collections.grandTotal}
                 </th>
+                {/* No total: summing monthly rates across clients means nothing. */}
+                <td className="border-r border-line/60" />
                 {monthTotals.map((value, i) => (
                   <td key={i} className="tnum px-2 py-2.5 text-right">
                     {value.toLocaleString("en-US")}
@@ -299,8 +358,58 @@ export function CollectionReportTable({
       )}
 
       <p className="border-t border-line px-4 py-2.5 text-xs text-ink-faint sm:px-5">
-        {t.collections.basisNote}
+        {t.collections.basisNote} {t.collections.monthlyBillNote}
       </p>
     </Card>
+  );
+}
+
+/**
+ * One amount all year: just the amount. Otherwise each amount with the months
+ * it applied to, newest last, and a marker so a change is seen at a glance.
+ */
+function MonthlyBillCell({ summary }: { summary: BillMonthsSummary }) {
+  if (summary.latest === null) {
+    return <span className="text-ink-faint">-</span>;
+  }
+
+  if (isFlatFullYear(summary)) {
+    return <span className="tnum font-medium whitespace-nowrap text-ink">{formatCurrency(summary.latest)}</span>;
+  }
+
+  // One amount over part of the year (a client who started in August, or the
+  // current year before December): amount over months, two lines. Rows are
+  // already two lines tall, so this narrows the column without growing rows -
+  // on one line it pushed the year total off a laptop-width screen.
+  if (!summary.changed && summary.segments.length === 1) {
+    return (
+      <div className="leading-tight whitespace-nowrap">
+        <span className="tnum block font-medium text-ink">{formatCurrency(summary.latest)}</span>
+        <span className="block text-xs text-ink-faint">
+          {formatRanges(summary.segments[0].ranges, MONTHS_SHORT)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0.5 text-right">
+      {summary.changed && (
+        <span className="inline-block rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-brand-700 uppercase">
+          {t.collections.changed}
+        </span>
+      )}
+      {summary.segments.map((segment, index) => (
+        <div
+          key={index}
+          className={`text-xs whitespace-nowrap ${
+            index === summary.segments.length - 1 ? "text-ink" : "text-ink-soft"
+          }`}
+        >
+          <span className="tnum font-medium">{formatCurrency(segment.amount)}</span>{" "}
+          <span className="text-ink-faint">{formatRanges(segment.ranges, MONTHS_SHORT)}</span>
+        </div>
+      ))}
+    </div>
   );
 }

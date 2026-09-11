@@ -28,7 +28,9 @@ import {
   pdfMoney,
   pdfNumber,
   savePdf,
+  type PdfDoc,
 } from "@/lib/export/pdf";
+import { formatRanges, summariseBillMonths } from "@/lib/collection-math";
 import { formatCurrency, formatDate, formatMonth, formatReceiptNo } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { ClientPaymentRow } from "@/lib/queries/collection-report";
@@ -84,14 +86,48 @@ export function ClientPaymentsView({
   const valid = payments.filter((p) => !p.voided);
   const totalPaid = valid.reduce((sum, p) => sum + p.amount, 0);
 
+  // The monthly bill as it was actually billed, month by month, across the
+  // years loaded - so a statement for a client whose bill was raised part-way
+  // through does not print today's rate as if it had always applied. Original
+  // bill_amount, not the adjusted figure: a discount is not a rate change.
+  const billYears = [...new Set(billCells.map((c) => c.year))].sort((a, b) => a - b);
+  const billLabels = billYears.flatMap((year) => MONTHS.map((m) => `${m.slice(0, 3)} ${year}`));
+  const cellAt = new Map(billCells.map((c) => [`${c.year}-${c.month}`, c]));
+  const billHistory = summariseBillMonths(
+    billYears.flatMap((year) =>
+      MONTHS.map((_, i) => cellAt.get(`${year}-${i + 1}`)?.billAmount ?? null),
+    ),
+  );
+
   const clientMeta = [
     { label: "Client", value: client.name },
     { label: "Code", value: client.code },
     { label: "Phone", value: client.phone ?? "-" },
     { label: "Area", value: client.areaName ?? "Unassigned" },
     { label: "Address", value: client.address ?? "-" },
-    { label: "Monthly bill", value: pdfMoney(client.monthlyBill) },
+    {
+      label: "Monthly bill",
+      // Header values are single lines; the full history gets its own table.
+      value: billHistory.changed
+        ? `${pdfMoney(client.monthlyBill)} (changed - see history)`
+        : pdfMoney(client.monthlyBill),
+    },
   ];
+
+  /** Amount and months, one row per change. Drawn only when it changed. */
+  const addMonthlyBillHistory = (pdf: PdfDoc) => {
+    if (!billHistory.changed) return;
+    pdf.cursorY = addPdfTable(pdf, {
+      head: [[`Monthly bill history (${billYears[0]}-${billYears[billYears.length - 1]})`, "Billed for"]],
+      body: billHistory.segments.map((segment) => [
+        pdfMoney(segment.amount),
+        formatRanges(segment.ranges, billLabels, " to "),
+      ]),
+      tableWidth: 360,
+      styles: { fontSize: 8, cellPadding: 3.5 },
+      columnStyles: { 0: { cellWidth: 150, halign: "right" } },
+    });
+  };
 
   /* ----------------------------------------------------- payment history PDF */
   const exportPaymentsPdf = () => {
@@ -119,6 +155,8 @@ export function ClientPaymentsView({
         ],
         pdf.cursorY,
       );
+
+      addMonthlyBillHistory(pdf);
 
       addPdfTable(pdf, {
         head: [["Billing Month", "Payment Date", "Amount", "Method", "Collected By", "Reference"]],
@@ -170,6 +208,8 @@ export function ClientPaymentsView({
         orientation: years.length > 4 ? "landscape" : "portrait",
         meta: clientMeta,
       });
+
+      addMonthlyBillHistory(pdf);
 
       addPdfTable(pdf, {
         head: [["Month", ...years.map(String)]],

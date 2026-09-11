@@ -15,6 +15,7 @@ import {
   getClientBillMatrix,
   getClientBillYears,
   getClientBills,
+  getClientUnpaidBills,
 } from "@/lib/queries/clients";
 import {
   getClientFinancialSummary,
@@ -57,11 +58,12 @@ export default async function ClientPaymentsPage({
   const windowYears = [endYear - 2, endYear - 1, endYear].filter((y) => years.includes(y));
   const columns = windowYears.length > 0 ? windowYears : [endYear];
 
-  const [bills, payments, summary, billCells] = await Promise.all([
+  const [bills, payments, summary, billCells, unpaidBills] = await Promise.all([
     getClientBills(id, 12),
     getClientPaymentHistory(id),
     getClientFinancialSummary(id),
     getClientBillMatrix(id, columns[0], columns[columns.length - 1]),
+    getClientUnpaidBills(id),
   ]);
 
   const currentBill = bills.find((bill) => bill.billing_month === currentMonth) ?? null;
@@ -124,23 +126,24 @@ export default async function ClientPaymentsPage({
         />
         <CardBody>
           {currentBill ? (
-            <>
-              <BillFinancialSummary
-                bill={currentBill}
-                approvedBy={currentBill.adjuster?.full_name}
-              />
-              <div className="mt-4">
-                <CollectPaymentButton
-                  clientId={client.id}
-                  clientName={client.name}
-                  bill={currentBill}
-                  size="lg"
-                  fullWidth
-                />
-              </div>
-            </>
+            <BillFinancialSummary
+              bill={currentBill}
+              approvedBy={currentBill.adjuster?.full_name}
+            />
           ) : (
             <EmptyState title={t.bill.noBillForMonth} description={t.bill.askAdmin} />
+          )}
+          {/* Across every unpaid month, not just this one - arrears included. */}
+          {unpaidBills.length > 0 && (
+            <div className="mt-4">
+              <CollectPaymentButton
+                clientId={client.id}
+                clientName={client.name}
+                bills={unpaidBills}
+                size="lg"
+                fullWidth
+              />
+            </div>
           )}
         </CardBody>
       </Card>

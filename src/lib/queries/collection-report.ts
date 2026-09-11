@@ -21,6 +21,13 @@ export interface CollectionMatrixRow {
   months: number[];
   yearTotal: number;
   paymentCount: number;
+  /**
+   * The bill amount actually billed for each month of the year, January first;
+   * null where the client had no bill. Null altogether when the client had no
+   * bills that year. Billing-month basis - unlike `months`, which follows the
+   * payment date. See collection_bill_months() in migration 0010.
+   */
+  billMonths: (number | null)[] | null;
 }
 
 export interface CollectionFilters {
@@ -49,13 +56,30 @@ export async function getCollectionMatrix(
   filters: CollectionFilters,
 ): Promise<CollectionMatrixRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("collection_matrix", {
-    p_year: filters.year,
-    p_area_id: filters.areaId ?? null,
-    p_collector_id: filters.collectorId ?? null,
-  });
-  if (error) throw error;
+  const [matrix, billed] = await Promise.all([
+    supabase.rpc("collection_matrix", {
+      p_year: filters.year,
+      p_area_id: filters.areaId ?? null,
+      p_collector_id: filters.collectorId ?? null,
+    }),
+    // No collector filter: a bill is not collected by anyone. Area only, which
+    // matches the bill ladder in collection_summary().
+    supabase.rpc("collection_bill_months", {
+      p_year: filters.year,
+      p_area_id: filters.areaId ?? null,
+    }),
+  ]);
+  if (matrix.error) throw matrix.error;
+  if (billed.error) throw billed.error;
 
+  const billMonthsByClient = new Map(
+    (billed.data ?? []).map((row) => [
+      row.client_id,
+      row.bill_amounts.map((value) => (value === null ? null : Number(value))),
+    ]),
+  );
+
+  const data = matrix.data;
   return (data ?? []).map((row) => ({
     clientId: row.client_id,
     clientCode: row.client_code,
@@ -69,6 +93,7 @@ export async function getCollectionMatrix(
     ],
     yearTotal: Number(row.year_total),
     paymentCount: Number(row.payment_count),
+    billMonths: billMonthsByClient.get(row.client_id) ?? null,
   }));
 }
 

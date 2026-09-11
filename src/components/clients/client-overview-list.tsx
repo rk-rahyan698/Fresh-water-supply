@@ -5,13 +5,40 @@ import { Badge, BillStatusBadge, ClientStatusBadge } from "@/components/ui/badge
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { formatCurrency, formatMonth } from "@/lib/format";
+import { formatCurrency, formatMonth, formatMonthShort } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { ClientOverviewRow } from "@/lib/queries/clients";
+import type { BillStateFilter, ClientOverviewRow } from "@/lib/queries/clients";
+
+/** Options for the `?bill=` filter, in the order a collector reaches for them. */
+export const BILL_STATE_OPTIONS: { value: BillStateFilter | ""; label: string }[] = [
+  { value: "", label: t.bill.stateAll },
+  { value: "due", label: t.bill.stateDue },
+  { value: "paid", label: t.bill.statePaid },
+  { value: "unbilled", label: t.bill.stateUnbilled },
+];
+
+/**
+ * "12 unpaid clients", "1 active paid client", "5 clients with no bill".
+ * `qualifier` is an extra adjective such as the client status.
+ */
+export function clientCountLabel(
+  total: number,
+  billState?: BillStateFilter,
+  qualifier?: string,
+): string {
+  const noun = total === 1 ? "client" : "clients";
+  const adjectives = [
+    qualifier,
+    billState === "due" ? "unpaid" : billState === "paid" ? "paid" : undefined,
+  ].filter(Boolean);
+  const suffix = billState === "unbilled" ? " with no bill" : "";
+  return [String(total), ...adjectives, noun].join(" ") + suffix;
+}
 
 /**
  * Client list with this month's bill attached (spec section 24), so the owner
- * can see who is paid, partial and unpaid without opening every profile.
+ * and collectors can see who is paid, partial and unpaid without opening every
+ * profile.
  *
  * Clients with no bill for the month show "-" rather than a misleading ৳0.
  */
@@ -24,6 +51,7 @@ export function ClientOverviewList({
   total,
   searching,
   emptyAction,
+  showPaymentsAction = true,
 }: {
   rows: ClientOverviewRow[];
   month: string;
@@ -33,6 +61,8 @@ export function ClientOverviewList({
   total: number;
   searching: boolean;
   emptyAction?: React.ReactNode;
+  /** Admins have a per-client payments page; collectors collect from the profile. */
+  showPaymentsAction?: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -40,7 +70,9 @@ export function ClientOverviewList({
         <EmptyState
           icon={Users}
           title={searching ? t.client.emptySearch : t.client.empty}
-          description={searching ? "Try a different name, phone, code or area." : undefined}
+          description={
+            searching ? "Try a different search, area, month or payment filter." : undefined
+          }
           action={emptyAction}
         />
       </Card>
@@ -79,7 +111,9 @@ export function ClientOverviewList({
                       )}
                     </>
                   ) : (
-                    <span className="text-ink-faint">No bill this month</span>
+                    <span className="text-ink-faint">
+                      {t.bill.noBill} · {formatMonthShort(month)}
+                    </span>
                   )}
                 </p>
               </div>
@@ -90,22 +124,24 @@ export function ClientOverviewList({
             </Link>
             {/* Explicit, thumb-sized targets - the whole row already opens the
                 profile, but Payments needs its own reachable button. */}
-            <div className="mt-2.5 grid grid-cols-2 gap-2">
-              <Link
-                href={`${basePath}/${row.clientId}`}
-                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-medium text-ink active:bg-canvas"
-              >
-                <User className="size-4" />
-                {t.collections.profile}
-              </Link>
-              <Link
-                href={`${basePath}/${row.clientId}/payments`}
-                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-700 active:bg-brand-100"
-              >
-                <HandCoins className="size-4" />
-                {t.collections.paymentsAction}
-              </Link>
-            </div>
+            {showPaymentsAction && (
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <Link
+                  href={`${basePath}/${row.clientId}`}
+                  className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-medium text-ink active:bg-canvas"
+                >
+                  <User className="size-4" />
+                  {t.collections.profile}
+                </Link>
+                <Link
+                  href={`${basePath}/${row.clientId}/payments`}
+                  className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-700 active:bg-brand-100"
+                >
+                  <HandCoins className="size-4" />
+                  {t.collections.paymentsAction}
+                </Link>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -122,7 +158,7 @@ export function ClientOverviewList({
               <TH align="right">{t.bill.paid}</TH>
               <TH align="right">{t.bill.due}</TH>
               <TH>{t.bill.status}</TH>
-              <TH align="right">{t.common.actions}</TH>
+              {showPaymentsAction && <TH align="right">{t.common.actions}</TH>}
             </TR>
           </THead>
           <TBody>
@@ -189,27 +225,29 @@ export function ClientOverviewList({
                   {row.billStatus ? (
                     <BillStatusBadge status={row.billStatus} />
                   ) : (
-                    <span className="text-xs text-ink-faint">No bill</span>
+                    <span className="text-xs text-ink-faint">{t.bill.noBill}</span>
                   )}
                 </TD>
-                <TD align="right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <Link
-                      href={`${basePath}/${row.clientId}`}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-medium text-ink transition-colors hover:bg-canvas"
-                    >
-                      <User className="size-3.5" />
-                      {t.collections.profile}
-                    </Link>
-                    <Link
-                      href={`${basePath}/${row.clientId}/payments`}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-brand-50 px-2.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
-                    >
-                      <HandCoins className="size-3.5" />
-                      {t.collections.paymentsAction}
-                    </Link>
-                  </div>
-                </TD>
+                {showPaymentsAction && (
+                  <TD align="right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Link
+                        href={`${basePath}/${row.clientId}`}
+                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-medium text-ink transition-colors hover:bg-canvas"
+                      >
+                        <User className="size-3.5" />
+                        {t.collections.profile}
+                      </Link>
+                      <Link
+                        href={`${basePath}/${row.clientId}/payments`}
+                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-brand-50 px-2.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
+                      >
+                        <HandCoins className="size-3.5" />
+                        {t.collections.paymentsAction}
+                      </Link>
+                    </div>
+                  </TD>
+                )}
               </TR>
             ))}
           </TBody>

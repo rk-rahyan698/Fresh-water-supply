@@ -145,6 +145,13 @@ export const en = {
     adjustment: "Adjustment",
     adjustedBill: "Adjusted bill",
     remainingDue: "Remaining due",
+    // Client list filter by bill state (migration 0012)
+    stateFilter: "Payment",
+    stateAll: "All",
+    stateDue: "Unpaid",
+    statePaid: "Paid",
+    stateUnbilled: "No bill yet",
+    noBill: "No bill",
   },
 
   adjustment: {

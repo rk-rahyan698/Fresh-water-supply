@@ -6,7 +6,6 @@ import type {
   BillStatus,
   ClientStatus,
   ClientWithArea,
-  ClientWithRate,
   MonthlyBill,
   Payment,
   Profile,
@@ -35,61 +34,6 @@ function assertRateField<T extends { monthly_bill?: unknown }>(row: T | null | u
 /** `%` and `_` are wildcards in ILIKE - neutralise them before interpolating. */
 export function escapeLike(term: string): string {
   return term.replace(/[%_\\]/g, (c) => `\\${c}`);
-}
-
-export interface ClientListParams {
-  search?: string;
-  status?: ClientStatus | "all";
-  areaId?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface ClientListResult {
-  clients: ClientWithRate[];
-  total: number;
-  page: number;
-  pageCount: number;
-}
-
-export async function listClients(params: ClientListParams = {}): Promise<ClientListResult> {
-  const supabase = await createClient();
-  const page = Math.max(1, params.page ?? 1);
-  const pageSize = params.pageSize ?? PAGE_SIZE;
-  const from = (page - 1) * pageSize;
-
-  // `monthly_bill` is a PostgREST computed field now, not a column, so "*"
-  // does not include it - it has to be named. See migration 0008.
-  let query = supabase
-    .from("clients")
-    .select("*, monthly_bill", { count: "exact" })
-    .order("name", { ascending: true })
-    .range(from, from + pageSize - 1);
-
-  if (params.status && params.status !== "all") {
-    query = query.eq("status", params.status);
-  }
-  if (params.areaId) {
-    query = query.eq("area_id", params.areaId);
-  }
-
-  const search = params.search?.trim();
-  if (search) {
-    // One indexed lookup across name, code, phone and address.
-    query = query.ilike("search_text", `%${escapeLike(search)}%`);
-  }
-
-  const { data, error, count } = await query.overrideTypes<ClientWithRate[], { merge: false }>();
-  if (error) throw error;
-  assertRateField(data?.[0]);
-
-  const total = count ?? 0;
-  return {
-    clients: data ?? [],
-    total,
-    page,
-    pageCount: Math.max(1, Math.ceil(total / pageSize)),
-  };
 }
 
 export async function getClient(id: string): Promise<ClientWithArea | null> {
@@ -257,6 +201,18 @@ export interface ClientOverviewResult {
 }
 
 /**
+ * Which clients to show by the state of their bill for the month (0012).
+ * "due" is unpaid OR partial - everyone a collector still has to visit.
+ */
+export const BILL_STATES = ["due", "paid", "unbilled"] as const;
+export type BillStateFilter = (typeof BILL_STATES)[number];
+
+/** The `?bill=` search param, or undefined for anything unrecognised. */
+export function parseBillState(value: string | undefined): BillStateFilter | undefined {
+  return BILL_STATES.find((state) => state === value);
+}
+
+/**
  * Clients plus their bill for one month, in a single round trip.
  *
  * Doing this as one RPC rather than "list clients, then fetch each bill" is
@@ -267,6 +223,7 @@ export async function listClientOverview(params: {
   areaId?: string;
   search?: string;
   status?: ClientStatus | "all";
+  billState?: BillStateFilter;
   page?: number;
   pageSize?: number;
 } = {}): Promise<ClientOverviewResult> {
@@ -274,11 +231,12 @@ export async function listClientOverview(params: {
   const page = Math.max(1, params.page ?? 1);
   const pageSize = params.pageSize ?? PAGE_SIZE;
 
-  const { data, error } = await supabase.rpc("client_month_overview", {
+  const { data, error } = await supabase.rpc("client_month_overview_filtered", {
     p_month: params.month ?? dhakaCurrentMonth(),
     p_area_id: params.areaId ?? null,
     p_search: params.search?.trim() || null,
     p_status: params.status && params.status !== "all" ? params.status : null,
+    p_bill_state: params.billState ?? null,
     p_limit: pageSize,
     p_offset: (page - 1) * pageSize,
   });

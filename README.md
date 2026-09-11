@@ -85,6 +85,7 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0009_server_side_totals.sql` | Aggregates the list totals in SQL instead of in the app |
 | `0010_multi_month_collection.sql` | One payment across several months, monthly bill per client in reports, mid-month rate changes, correct receipts |
 | `0011_collection_matrix_by_bill.sql` | Collection report by the month each payment paid for, with what is still due |
+| `0012_client_overview_bill_filter.sql` | Paid / Unpaid / No bill filter on the client lists, for any month |
 
 They are written to be safe to re-run, on an empty database and on one that
 already holds bills and payments.
@@ -674,10 +675,11 @@ trust.
 | `npm run verify:totals` | 0009: list and report totals are exact above the row caps, and still RLS-scoped |
 | `npm run verify:collection` | 0010: multi-month collection is atomic, receipts are right, rate changes reach bills, `setup.sql` re-runs |
 | `npm run verify:bybill` | 0011: report by billing month reads AUG 500 · SEP 500 where by payment date read AUG 0 · SEP 1,000 |
+| `npm run verify:billfilter` | 0012: Paid / Unpaid / No bill filters return exactly the right clients, page correctly, and match the badges |
 | `npm run verify:exports` | CSV and PDF generation |
 | `npm run verify:cleanup` | `remove-demo-data.sql` deletes demo rows and only demo rows |
 | `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
-| `npm run verify:all` | Every offline suite in sequence (472 assertions) |
+| `npm run verify:all` | Every offline suite in sequence (525 assertions) |
 | `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write — **currently non-functional, see below** |

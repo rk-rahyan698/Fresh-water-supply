@@ -513,6 +513,19 @@ export interface Database {
           total_count: number;
         }[];
       };
+      /** client_month_overview plus a bill-state filter - migration 0012. */
+      client_month_overview_filtered: {
+        Args: {
+          p_month?: string | null;
+          p_area_id?: string | null;
+          p_search?: string | null;
+          p_status?: ClientStatus | null;
+          p_bill_state?: "paid" | "due" | "unbilled" | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: Database["public"]["Functions"]["client_month_overview"]["Returns"];
+      };
       payment_years: {
         Args: Record<string, never>;
         Returns: { payment_year: number; payment_count: number; total_amount: number }[];

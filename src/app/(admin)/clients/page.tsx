@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import { UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/button";
-import { ClientOverviewList } from "@/components/clients/client-overview-list";
+import {
+  BILL_STATE_OPTIONS,
+  ClientOverviewList,
+  clientCountLabel,
+} from "@/components/clients/client-overview-list";
 import { FilterBar, UrlSearchInput, UrlSelect } from "@/components/filters/url-controls";
-import { listClientOverview } from "@/lib/queries/clients";
+import { listClientOverview, parseBillState } from "@/lib/queries/clients";
 import { listAreas } from "@/lib/queries/areas";
 import { dhakaCurrentMonth, formatMonth, monthOptions, toMonthStart } from "@/lib/format";
 import { t } from "@/lib/i18n";
@@ -26,6 +30,7 @@ export default async function AdminClientsPage({
     status?: string;
     area?: string;
     month?: string;
+    bill?: string;
     page?: string;
   }>;
 }) {
@@ -33,6 +38,7 @@ export default async function AdminClientsPage({
   const search = params.q ?? "";
   const status = (params.status as ClientStatus | "all") ?? "active";
   const month = params.month ? toMonthStart(params.month) : dhakaCurrentMonth();
+  const billState = parseBillState(params.bill);
   const page = Number(params.page ?? 1);
 
   // "none" is the sentinel for clients with no area, so they stay reachable.
@@ -40,7 +46,7 @@ export default async function AdminClientsPage({
 
   const [areas, result] = await Promise.all([
     listAreas(),
-    listClientOverview({ month, areaId: areaFilter, search, status, page }),
+    listClientOverview({ month, areaId: areaFilter, search, status, billState, page }),
   ]);
 
   // The RPC has no "unassigned only" mode, so filter that case in the app.
@@ -50,7 +56,7 @@ export default async function AdminClientsPage({
     <>
       <PageHeader
         title={t.client.many}
-        description={`${result.total} ${status === "all" ? "" : status} ${result.total === 1 ? "client" : "clients"} · ${formatMonth(month)}`}
+        description={`${clientCountLabel(result.total, billState, status === "all" ? undefined : status)} · ${formatMonth(month)}`}
         action={
           <LinkButton href="/clients/new" size="md">
             <UserPlus className="size-4.5" />
@@ -88,6 +94,13 @@ export default async function AdminClientsPage({
           className="w-full sm:w-40"
         />
         <UrlSelect
+          param="bill"
+          value={billState ?? ""}
+          label={t.bill.stateFilter}
+          options={BILL_STATE_OPTIONS}
+          className="w-full sm:w-36"
+        />
+        <UrlSelect
           param="status"
           value={status}
           label={t.client.status}
@@ -103,7 +116,7 @@ export default async function AdminClientsPage({
         page={page}
         pageCount={result.pageCount}
         total={result.total}
-        searching={Boolean(search) || Boolean(params.area)}
+        searching={Boolean(search) || Boolean(params.area) || Boolean(billState)}
         emptyAction={
           !search ? (
             <LinkButton href="/clients/new" size="sm">

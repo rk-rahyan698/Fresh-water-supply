@@ -393,6 +393,16 @@ export const en = {
     empty: "No payments recorded for this year and filter.",
     profile: "Profile",
     paymentsAction: "Payments",
+    // Which question the month columns answer (migration 0011)
+    view: "Months show",
+    byBill: "Paid for each month",
+    byPayment: "Received each month",
+    byBillNote:
+      "Each month shows what was paid toward that month's bill, whenever it was paid - so a client who pays August and September together shows both months paid. A small red figure is what is still due on that month's bill; - means no bill.",
+    byPaymentNote:
+      "Each month shows cash received in that calendar month, by payment date. A client who pays August and September on the same day shows it all under the month they paid - use this view to reconcile cash, not to see which months are paid.",
+    due: "due",
+    yearDue: "Still due",
     monthlyBill: "Monthly bill",
     monthlyBillNote:
       "Monthly bill is the amount on each month's bill, by billing month. If it changed during the year, each amount is shown with the months it applied to.",

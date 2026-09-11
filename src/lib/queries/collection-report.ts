@@ -11,21 +11,40 @@ import type {
 /* All-clients Client x Month collection report                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What a month column means.
+ *
+ *   bill     paid TOWARD that month's bill, whenever it was paid (default).
+ *            A client who pays August and September on 11 September reads
+ *            AUG 500 / SEP 500 - both months visibly settled.
+ *   payment  cash RECEIVED in that calendar month. The same client reads
+ *            AUG 0 / SEP 1,000 - right for reconciling what came in during
+ *            September, misleading as a picture of which months are paid.
+ */
+export type CollectionBasis = "bill" | "payment";
+
 export interface CollectionMatrixRow {
   clientId: string;
   clientCode: string;
   clientName: string;
   areaId: string | null;
   areaName: string | null;
-  /** Index 0 = January ... index 11 = December. */
+  /** Index 0 = January ... index 11 = December. 0 where nothing applies. */
   months: number[];
+  /**
+   * By billing month only: what is still due on each month's bill, null where
+   * the client has no bill that month. Null altogether by payment date, where
+   * a column is cash received and has no bill to owe on.
+   */
+  monthDue: (number | null)[] | null;
   yearTotal: number;
+  /** By billing month only: still owed across the year's bills. */
+  yearDue: number | null;
   paymentCount: number;
   /**
    * The bill amount actually billed for each month of the year, January first;
    * null where the client had no bill. Null altogether when the client had no
-   * bills that year. Billing-month basis - unlike `months`, which follows the
-   * payment date. See collection_bill_months() in migration 0010.
+   * bills that year. See collection_bill_months() in migration 0010.
    */
   billMonths: (number | null)[] | null;
 }
@@ -34,44 +53,84 @@ export interface CollectionFilters {
   year: number;
   areaId?: string;
   collectorId?: string;
-}
-
-/** Years that actually have payments, newest first. Never hardcoded. */
-export async function getPaymentYears(): Promise<number[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("payment_years");
-  if (error) throw error;
-  return (data ?? []).map((row) => Number(row.payment_year));
+  basis?: CollectionBasis;
 }
 
 /**
- * Client x Month collection matrix.
+ * Years with bills or payments, newest first. Never hardcoded.
  *
- * Every cell is money actually collected in that calendar month
- * (payment_date basis) - not the bill amount, and never moved back to the
- * month the bill belongs to. The pivot happens in SQL, so the browser
- * receives one row per client rather than every payment.
+ * Not payment_years(): by billing month a year matters as soon as it is
+ * billed, and on 1 January nobody has paid the new year's bills yet.
+ */
+export async function getReportYears(): Promise<number[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("collection_report_years");
+  if (error) throw error;
+  return (data ?? []).map((row) => Number(row.report_year));
+}
+
+/**
+ * Client x Month collection matrix, by billing month (default) or by payment
+ * date. The pivot happens in SQL either way, so the browser receives one row
+ * per client rather than every payment.
  */
 export async function getCollectionMatrix(
   filters: CollectionFilters,
 ): Promise<CollectionMatrixRow[]> {
   const supabase = await createClient();
-  const [matrix, billed] = await Promise.all([
-    supabase.rpc("collection_matrix", {
-      p_year: filters.year,
-      p_area_id: filters.areaId ?? null,
-      p_collector_id: filters.collectorId ?? null,
-    }),
-    // No collector filter: a bill is not collected by anyone. Area only, which
-    // matches the bill ladder in collection_summary().
-    supabase.rpc("collection_bill_months", {
-      p_year: filters.year,
-      p_area_id: filters.areaId ?? null,
-    }),
-  ]);
-  if (matrix.error) throw matrix.error;
-  if (billed.error) throw billed.error;
+  const basis = filters.basis ?? "bill";
+  const args = {
+    p_year: filters.year,
+    p_area_id: filters.areaId ?? null,
+    p_collector_id: filters.collectorId ?? null,
+  };
 
+  // No collector filter on bill amounts: a bill is not collected by anyone.
+  // Area only, which matches the bill ladder in collection_summary().
+  const billedPromise = supabase.rpc("collection_bill_months", {
+    p_year: filters.year,
+    p_area_id: filters.areaId ?? null,
+  });
+
+  let rows: Omit<CollectionMatrixRow, "billMonths">[];
+  if (basis === "bill") {
+    const { data, error } = await supabase.rpc("collection_matrix_by_bill", args);
+    if (error) throw error;
+    rows = (data ?? []).map((row) => ({
+      clientId: row.client_id,
+      clientCode: row.client_code,
+      clientName: row.client_name,
+      areaId: row.area_id,
+      areaName: row.area_name,
+      months: row.paid_amounts.map((value) => (value === null ? 0 : Number(value))),
+      monthDue: row.due_amounts.map((value) => (value === null ? null : Number(value))),
+      yearTotal: Number(row.year_total),
+      yearDue: Number(row.year_due),
+      paymentCount: Number(row.payment_count),
+    }));
+  } else {
+    const { data, error } = await supabase.rpc("collection_matrix", args);
+    if (error) throw error;
+    rows = (data ?? []).map((row) => ({
+      clientId: row.client_id,
+      clientCode: row.client_code,
+      clientName: row.client_name,
+      areaId: row.area_id,
+      areaName: row.area_name,
+      months: [
+        Number(row.m01), Number(row.m02), Number(row.m03), Number(row.m04),
+        Number(row.m05), Number(row.m06), Number(row.m07), Number(row.m08),
+        Number(row.m09), Number(row.m10), Number(row.m11), Number(row.m12),
+      ],
+      monthDue: null,
+      yearTotal: Number(row.year_total),
+      yearDue: null,
+      paymentCount: Number(row.payment_count),
+    }));
+  }
+
+  const billed = await billedPromise;
+  if (billed.error) throw billed.error;
   const billMonthsByClient = new Map(
     (billed.data ?? []).map((row) => [
       row.client_id,
@@ -79,22 +138,7 @@ export async function getCollectionMatrix(
     ]),
   );
 
-  const data = matrix.data;
-  return (data ?? []).map((row) => ({
-    clientId: row.client_id,
-    clientCode: row.client_code,
-    clientName: row.client_name,
-    areaId: row.area_id,
-    areaName: row.area_name,
-    months: [
-      Number(row.m01), Number(row.m02), Number(row.m03), Number(row.m04),
-      Number(row.m05), Number(row.m06), Number(row.m07), Number(row.m08),
-      Number(row.m09), Number(row.m10), Number(row.m11), Number(row.m12),
-    ],
-    yearTotal: Number(row.year_total),
-    paymentCount: Number(row.payment_count),
-    billMonths: billMonthsByClient.get(row.client_id) ?? null,
-  }));
+  return rows.map((row) => ({ ...row, billMonths: billMonthsByClient.get(row.clientId) ?? null }));
 }
 
 export async function getCollectionSummary(

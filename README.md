@@ -84,6 +84,7 @@ Or run them individually **in order**, from `supabase/migrations/`:
 | `0008_normalize_3nf.sql` | Third normal form: removes two redundant columns |
 | `0009_server_side_totals.sql` | Aggregates the list totals in SQL instead of in the app |
 | `0010_multi_month_collection.sql` | One payment across several months, monthly bill per client in reports, mid-month rate changes, correct receipts |
+| `0011_collection_matrix_by_bill.sql` | Collection report by the month each payment paid for, with what is still due |
 
 They are written to be safe to re-run, on an empty database and on one that
 already holds bills and payments.
@@ -377,6 +378,21 @@ number plus a detail column; the PDF prints each amount on its own line. A
 client's own Payment History and Bill History PDFs add a *Monthly bill history*
 table whenever the amount changed.
 
+**Which month a payment shows under.** The Collection Report's month columns
+default to **Paid for each month**: what was paid *toward that month's bill*,
+whenever it was paid. A client billed ৳500 who pays August and September
+together on 11 September reads `AUG 500 · SEP 500` - both months visibly
+settled. A month still owing shows the amount in small red underneath (`due
+100`), and `-` means no bill, so "not billed" and "billed but unpaid" never look
+alike. A January payment for December counts under December.
+
+The other view, **Received each month**, is the report as it used to be: cash
+by the date it came in. The same client reads `AUG 0 · SEP 1,000`, which is
+right for reconciling what came in during September and misleading as a picture
+of which months are paid - exactly the confusion that prompted the change. The
+payments themselves were never mis-applied: `record_collection()` already
+splits oldest month first. Only the view changed (`0011`).
+
 There is no second copy of the rate anywhere. There used to be:
 `clients.monthly_bill` held "the rate in force today", and nothing moved it
 when a scheduled change came into effect - so from the 1st of the month the
@@ -657,10 +673,11 @@ trust.
 | `npm run verify:3nf` | Apply 0008 to a *populated* schema: normalisation, no data loss |
 | `npm run verify:totals` | 0009: list and report totals are exact above the row caps, and still RLS-scoped |
 | `npm run verify:collection` | 0010: multi-month collection is atomic, receipts are right, rate changes reach bills, `setup.sql` re-runs |
+| `npm run verify:bybill` | 0011: report by billing month reads AUG 500 · SEP 500 where by payment date read AUG 0 · SEP 1,000 |
 | `npm run verify:exports` | CSV and PDF generation |
 | `npm run verify:cleanup` | `remove-demo-data.sql` deletes demo rows and only demo rows |
 | `npm run verify:setup` | Fail if `supabase/setup.sql` is stale |
-| `npm run verify:all` | Every offline suite in sequence (415 assertions) |
+| `npm run verify:all` | Every offline suite in sequence (472 assertions) |
 | `npm run build:setup` | Regenerate `supabase/setup.sql` from the migrations |
 | `npm run verify:pages` | Log in for real and render every screen (needs `npm run dev` running) |
 | `npm run verify:live` | End-to-end against a real Supabase project, then reverse every write — **currently non-functional, see below** |
@@ -674,7 +691,7 @@ against PGlite — no Docker, no Supabase account, safe in CI. Only
 > — the seeded accounts that were removed when the seeder was dropped — so it
 > exits at the first `signIn()` on any real project. It is left in place rather
 > than deleted because the money rules it covers are all asserted offline
-> against PGlite by `verify:all` (415 assertions), which needs no account and no
+> against PGlite by `verify:all` (472 assertions), which needs no account and no
 > network. To revive it, replace the three hardcoded addresses with a lookup
 > against `profiles` the way `scripts/verify-pages.mjs` already does — and note
 > that the payments it records are reversed by *voiding*, which leaves permanent

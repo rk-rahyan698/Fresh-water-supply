@@ -7,7 +7,8 @@ import { FilterBar, UrlSelect } from "@/components/filters/url-controls";
 import {
   getCollectionMatrix,
   getCollectionSummary,
-  getPaymentYears,
+  getReportYears,
+  type CollectionBasis,
 } from "@/lib/queries/collection-report";
 import { listAreas } from "@/lib/queries/areas";
 import { listCollectors } from "@/lib/queries/reports";
@@ -20,13 +21,13 @@ export const metadata: Metadata = { title: "Collection Report" };
 export default async function CollectionReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; area?: string; collector?: string }>;
+  searchParams: Promise<{ year?: string; area?: string; collector?: string; view?: string }>;
 }) {
   const params = await searchParams;
 
   // Years come from the data, never hardcoded (spec section 10).
   const [years, areas, collectors] = await Promise.all([
-    getPaymentYears(),
+    getReportYears(),
     listAreas(),
     listCollectors(),
   ]);
@@ -36,8 +37,11 @@ export default async function CollectionReportPage({
   const year = Number(params.year) || yearOptions[0];
   const areaId = params.area || undefined;
   const collectorId = params.collector || undefined;
+  // By billing month unless asked otherwise: "has each month been paid?" is
+  // the question a row of months is read as answering.
+  const basis: CollectionBasis = params.view === "received" ? "payment" : "bill";
 
-  const filters = { year, areaId, collectorId };
+  const filters = { year, areaId, collectorId, basis };
   const [rows, summary] = await Promise.all([
     getCollectionMatrix(filters),
     getCollectionSummary(filters),
@@ -83,6 +87,16 @@ export default async function CollectionReportPage({
             ...collectors.map((c) => ({ value: c.id, label: c.full_name })),
           ]}
           className="w-full sm:w-48"
+        />
+        <UrlSelect
+          param="view"
+          value={basis === "payment" ? "received" : ""}
+          label={t.collections.view}
+          options={[
+            { value: "", label: t.collections.byBill },
+            { value: "received", label: t.collections.byPayment },
+          ]}
+          className="w-full sm:w-52"
         />
       </FilterBar>
 
@@ -142,6 +156,7 @@ export default async function CollectionReportPage({
           areaLabel,
           collectorLabel,
           businessName: env.businessName,
+          basis,
         }}
       />
     </>

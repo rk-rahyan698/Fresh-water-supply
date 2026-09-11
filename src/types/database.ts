@@ -586,6 +586,27 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["payments"]["Row"][];
       };
+      /** Client x Month by BILLING month - migration 0011. */
+      collection_matrix_by_bill: {
+        Args: { p_year: number; p_area_id?: string | null; p_collector_id?: string | null };
+        Returns: {
+          client_id: string;
+          client_code: string;
+          client_name: string;
+          area_id: string | null;
+          area_name: string | null;
+          /** 12 entries, January first; null where the client has no bill. */
+          paid_amounts: (number | null)[];
+          due_amounts: (number | null)[];
+          year_total: number;
+          year_due: number;
+          payment_count: number;
+        }[];
+      };
+      collection_report_years: {
+        Args: Record<string, never>;
+        Returns: { report_year: number }[];
+      };
       collection_receipt: {
         Args: { p_payment_id: string };
         Returns: {

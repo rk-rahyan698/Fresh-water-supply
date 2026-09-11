@@ -69,6 +69,28 @@ export function sumAllocations(allocations: Pick<Allocation, "amount">[]): numbe
 }
 
 /* -------------------------------------------------------------------------- */
+/* One month of the collection report, by billing month                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * none     no bill for the month          -> "-"
+ * unpaid   billed, nothing paid, owes      -> "0", with the due shown
+ * partial  something paid, still owes      -> the amount, with the due shown
+ * paid     nothing left on the bill        -> the amount
+ *
+ * Decided from the bill's due, not from `paid` alone: under a collector filter
+ * `paid` is only that collector's share, and a month another collector settled
+ * is still a settled month.
+ */
+export type BillCellState = "none" | "unpaid" | "partial" | "paid";
+
+export function billCellState(paid: number | null, due: number | null): BillCellState {
+  if (paid === null || due === null) return "none";
+  if (toPaisa(due) <= 0) return "paid";
+  return toPaisa(paid) > 0 ? "partial" : "unpaid";
+}
+
+/* -------------------------------------------------------------------------- */
 /* The monthly bill across a year                                               */
 /* -------------------------------------------------------------------------- */
 

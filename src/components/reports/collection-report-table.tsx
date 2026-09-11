@@ -17,14 +17,16 @@ import {
   savePdf,
 } from "@/lib/export/pdf";
 import {
+  billCellState,
   formatRanges,
   isFlatFullYear,
   summariseBillMonths,
+  type BillCellState,
   type BillMonthsSummary,
 } from "@/lib/collection-math";
 import { formatCurrency } from "@/lib/format";
 import { t } from "@/lib/i18n";
-import type { CollectionMatrixRow } from "@/lib/queries/collection-report";
+import type { CollectionBasis, CollectionMatrixRow } from "@/lib/queries/collection-report";
 import type { CollectionSummary } from "@/types/database";
 
 const MONTHS_SHORT = [
@@ -41,7 +43,11 @@ export interface ReportContext {
   areaLabel: string;
   collectorLabel: string;
   businessName: string;
+  /** What a month column means - see CollectionBasis. */
+  basis: CollectionBasis;
 }
+
+const money = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /**
  * The monthly bill as plain text lines, for the exports.
@@ -88,9 +94,21 @@ export function CollectionReportTable({
     rows.map((row) => [row.clientId, summariseBillMonths(row.billMonths ?? [])]),
   );
 
+  // By billing month a column is "paid toward that month's bill", and each
+  // month also knows what is still due on it. By payment date it is cash
+  // received, with no bill to owe on.
+  const byBill = context.basis === "bill";
+  const grandDue = rows.reduce((sum, row) => sum + (row.yearDue ?? 0), 0);
+  const cellState = (row: CollectionMatrixRow, i: number) =>
+    byBill && row.monthDue
+      ? billCellState(row.monthDue[i] === null ? null : row.months[i], row.monthDue[i])
+      : null;
+
   const filenameParts = [
     "collection-report",
     context.year,
+    // The two views hold different numbers; the file name must say which.
+    byBill ? null : "received",
     context.areaLabel !== "All areas" ? context.areaLabel : null,
     context.collectorLabel !== "All collectors" ? context.collectorLabel : null,
   ];
@@ -102,8 +120,9 @@ export function CollectionReportTable({
     }
     setBusy("csv");
     try {
-      // Accounting-friendly columns; 0 rather than blank (spec section 18).
-      // "Monthly Bill" stays a plain number so a spreadsheet can use it; the
+      // Accounting-friendly columns; 0 rather than blank for anything that was
+      // billed or received (spec section 18) - blank only for a month with no
+      // bill, below. "Monthly Bill" stays a plain number so a spreadsheet can use it; the
       // detail column spells out the months when the amount changed.
       const header = [
         "Client Code",
@@ -111,8 +130,9 @@ export function CollectionReportTable({
         "Area",
         "Monthly Bill",
         "Monthly Bill Detail",
-        ...MONTHS_LONG,
+        ...MONTHS_LONG.map((name) => (byBill ? `${name} Paid` : name)),
         "Year Total",
+        ...(byBill ? ["Still Due"] : []),
       ];
       const body = rows.map((row) => {
         const bills = billSummaries.get(row.clientId)!;
@@ -122,8 +142,12 @@ export function CollectionReportTable({
           row.areaName ?? "Unassigned",
           bills.latest === null ? "" : bills.latest.toFixed(2),
           billDetailLines(bills).join("; "),
-          ...row.months.map((v) => v.toFixed(2)),
+          // By billing month a month with no bill is left blank rather than
+          // 0 - "not billed" and "billed, nothing paid" are different facts,
+          // and a spreadsheet's SUM skips blanks either way.
+          ...row.months.map((v, i) => (cellState(row, i) === "none" ? "" : v.toFixed(2))),
           row.yearTotal.toFixed(2),
+          ...(byBill ? [(row.yearDue ?? 0).toFixed(2)] : []),
         ];
       });
       const total = [
@@ -134,6 +158,7 @@ export function CollectionReportTable({
         "",
         ...monthTotals.map((v) => v.toFixed(2)),
         grandTotal.toFixed(2),
+        ...(byBill ? [grandDue.toFixed(2)] : []),
       ];
 
       downloadCsv(safeFilename(filenameParts), [header, ...body, total]);
@@ -156,7 +181,9 @@ export function CollectionReportTable({
       const pdf = createPdfDoc({
         businessName: context.businessName,
         title: t.collections.title,
-        subtitle: `Collections during ${context.year}, by the month the money was received. Monthly bill is by billing month.`,
+        subtitle: byBill
+          ? `${context.year}: paid toward each month's bill, whenever it was paid. "due" = still owed on that month.`
+          : `Collections during ${context.year}, by the month the money was received. Monthly bill is by billing month.`,
         orientation: "landscape",
         meta: [
           { label: "Year", value: String(context.year) },
@@ -192,8 +219,19 @@ export function CollectionReportTable({
             // amount on its own line with the months it applied to, so the
             // row grows rather than the figure being wrong for half the year.
             bills.latest === null ? "-" : detail.length > 0 ? detail.join("\n") : pdfNumber(bills.latest),
-            ...row.months.map((v) => (v === 0 ? "0" : pdfNumber(v))),
-            pdfNumber(row.yearTotal),
+            ...row.months.map((v, i) => {
+              const state = cellState(row, i);
+              if (state === "none") return "-";
+              // Print carries no colour, so an unpaid or part-paid month says
+              // what it still owes in words, on a second line.
+              if (state === "unpaid" || state === "partial") {
+                return `${v === 0 ? "0" : pdfNumber(v)}\ndue ${pdfNumber(row.monthDue![i] ?? 0)}`;
+              }
+              return v === 0 ? "0" : pdfNumber(v);
+            }),
+            byBill && (row.yearDue ?? 0) > 0
+              ? `${pdfNumber(row.yearTotal)}\ndue ${pdfNumber(row.yearDue ?? 0)}`
+              : pdfNumber(row.yearTotal),
           ];
         }),
         foot: [
@@ -202,7 +240,7 @@ export function CollectionReportTable({
             "",
             "",
             ...monthTotals.map((v) => pdfNumber(v)),
-            pdfNumber(grandTotal),
+            byBill && grandDue > 0 ? `${pdfNumber(grandTotal)}\ndue ${pdfNumber(grandDue)}` : pdfNumber(grandTotal),
           ],
         ],
         styles: { fontSize: 7, cellPadding: 3 },
@@ -262,7 +300,7 @@ export function CollectionReportTable({
       />
 
       {rows.length === 0 ? (
-        <EmptyState title={t.collections.empty} description={t.collections.basisNote} />
+        <EmptyState title={t.collections.empty} description={byBill ? t.collections.byBillNote : t.collections.byPaymentNote} />
       ) : (
         // Wide by nature: scrolls inside its own container, and the client
         // column stays pinned so a row stays identifiable while scrolling.
@@ -318,17 +356,20 @@ export function CollectionReportTable({
                     <MonthlyBillCell summary={billSummaries.get(row.clientId)!} />
                   </td>
                   {row.months.map((value, i) => (
-                    <td
+                    <MonthCell
                       key={i}
-                      className={`tnum px-2 py-2 text-right ${
-                        value > 0 ? "text-ink" : "text-ink-faint"
-                      }`}
-                    >
-                      {value > 0 ? value.toLocaleString("en-US") : "0"}
-                    </td>
+                      value={value}
+                      due={row.monthDue?.[i] ?? null}
+                      state={cellState(row, i)}
+                    />
                   ))}
                   <td className="tnum px-3 py-2 text-right font-semibold text-ink">
                     {row.yearTotal.toLocaleString("en-US")}
+                    {byBill && (row.yearDue ?? 0) > 0 && (
+                      <span className="block text-[11px] leading-tight font-medium text-danger">
+                        {t.collections.due} {money(row.yearDue ?? 0)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -350,6 +391,11 @@ export function CollectionReportTable({
                 ))}
                 <td className="tnum px-3 py-2.5 text-right">
                   {formatCurrency(grandTotal)}
+                  {byBill && grandDue > 0 && (
+                    <span className="block text-[11px] leading-tight text-danger">
+                      {t.collections.due} {money(grandDue)}
+                    </span>
+                  )}
                 </td>
               </tr>
             </tfoot>
@@ -358,7 +404,7 @@ export function CollectionReportTable({
       )}
 
       <p className="border-t border-line px-4 py-2.5 text-xs text-ink-faint sm:px-5">
-        {t.collections.basisNote} {t.collections.monthlyBillNote}
+        {byBill ? t.collections.byBillNote : t.collections.byPaymentNote} {t.collections.monthlyBillNote}
       </p>
     </Card>
   );
@@ -411,5 +457,52 @@ function MonthlyBillCell({ summary }: { summary: BillMonthsSummary }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * One month of one client.
+ *
+ * By payment date: cash received, 0 when none. By billing month: what was paid
+ * toward that month's bill, and - for a month still owing - how much, in words
+ * as well as colour, so an unpaid month can never pass for a settled one and a
+ * month with no bill ("-") never looks like an unpaid one ("0").
+ */
+function MonthCell({
+  value,
+  due,
+  state,
+}: {
+  value: number;
+  due: number | null;
+  state: BillCellState | null;
+}) {
+  if (state === null) {
+    return (
+      <td className={`tnum px-2 py-2 text-right ${value > 0 ? "text-ink" : "text-ink-faint"}`}>
+        {value > 0 ? value.toLocaleString("en-US") : "0"}
+      </td>
+    );
+  }
+
+  if (state === "none") {
+    return <td className="px-2 py-2 text-right text-ink-faint">-</td>;
+  }
+
+  const owing = state === "unpaid" || state === "partial";
+  return (
+    <td
+      className="tnum px-2 py-2 text-right"
+      title={owing && due !== null ? `${t.collections.due} ${money(due)}` : undefined}
+    >
+      <span className={state === "unpaid" ? "text-ink-faint" : "text-ink"}>
+        {value > 0 ? value.toLocaleString("en-US") : "0"}
+      </span>
+      {owing && due !== null && (
+        <span className="block text-[11px] leading-tight font-medium whitespace-nowrap text-danger">
+          {t.collections.due} {money(due)}
+        </span>
+      )}
+    </td>
   );
 }

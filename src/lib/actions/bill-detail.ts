@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
+import { getStaffNames } from "@/lib/queries/reports";
 import { actionError, actionOk, type ActionResult } from "@/lib/errors";
 import type { AdjustmentType, BillStatus, PaymentMethod } from "@/types/database";
 
@@ -45,11 +46,13 @@ interface BillDetailRow {
   status: BillStatus;
   adjustment_type: AdjustmentType | null;
   adjustment_reason: string | null;
+  adjusted_by: string | null;
   clients: { name: string } | null;
   adjuster: { full_name: string } | null;
   payments: {
     id: string;
     receipt_no: number;
+    collected_by: string;
     amount: number;
     payment_date: string;
     payment_method: PaymentMethod;
@@ -77,7 +80,7 @@ export async function getBillDetailAction(billId: string): Promise<ActionResult<
     .from("monthly_bills")
     .select(
       "*, clients(name), adjuster:profiles!monthly_bills_adjusted_by_fkey(full_name), " +
-        "payments(id, receipt_no, amount, payment_date, payment_method, notes, voided_at, void_reason, " +
+        "payments(id, receipt_no, collected_by, amount, payment_date, payment_method, notes, voided_at, void_reason, " +
         "collector:profiles!payments_collected_by_fkey(full_name))",
     )
     .eq("id", billId)
@@ -88,6 +91,18 @@ export async function getBillDetailAction(billId: string): Promise<ActionResult<
   if (!data) return actionError("Bill not found.");
 
   const row = data;
+
+  // A collector's RLS hides the owner's profile, so "Approved by" embeds as
+  // null for them. Look up whichever names the embeds could not see.
+  let names: Map<string, string>;
+  try {
+    names = await getStaffNames([
+      row.adjuster ? null : row.adjusted_by,
+      ...(row.payments ?? []).map((p) => (p.collector ? null : p.collected_by)),
+    ]);
+  } catch (lookupError) {
+    return actionError(lookupError);
+  }
 
   return actionOk({
     billId: row.id,
@@ -101,7 +116,7 @@ export async function getBillDetailAction(billId: string): Promise<ActionResult<
     status: row.status,
     adjustmentType: row.adjustment_type,
     adjustmentReason: row.adjustment_reason,
-    approvedBy: row.adjuster?.full_name ?? null,
+    approvedBy: row.adjuster?.full_name ?? (row.adjusted_by ? names.get(row.adjusted_by) : null) ?? null,
     payments: (row.payments ?? [])
       .map((p) => ({
         id: p.id,
@@ -109,7 +124,7 @@ export async function getBillDetailAction(billId: string): Promise<ActionResult<
         amount: Number(p.amount),
         paymentDate: p.payment_date,
         paymentMethod: p.payment_method,
-        collectorName: p.collector?.full_name ?? null,
+        collectorName: p.collector?.full_name ?? names.get(p.collected_by) ?? null,
         notes: p.notes,
         voided: p.voided_at !== null,
         voidReason: p.void_reason,

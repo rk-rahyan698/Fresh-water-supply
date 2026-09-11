@@ -1,8 +1,38 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+
+/**
+ * Dialogs currently open, innermost last. Shared by every Modal on the page
+ * because they stack: the confirm dialog opens on top of the collect-payment
+ * dialog, and the two used to fight over the page.
+ *
+ * Scroll lock is a count, not a save/restore per dialog. Saving the old
+ * `overflow` in each dialog broke as soon as two were open: when the confirm
+ * closed in the same render the payment dialog re-rendered, the payment dialog
+ * re-saved "hidden" as the value to restore, and on closing it put "hidden"
+ * back - leaving the page unscrollable until a reload.
+ */
+const openStack: symbol[] = [];
+let overflowBeforeLock = "";
+
+function lockScroll(id: symbol) {
+  if (openStack.length === 0) {
+    overflowBeforeLock = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+  openStack.push(id);
+}
+
+function unlockScroll(id: symbol) {
+  const index = openStack.indexOf(id);
+  if (index !== -1) openStack.splice(index, 1);
+  if (openStack.length === 0) document.body.style.overflow = overflowBeforeLock;
+}
+
+const FIELD = "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])";
 
 /**
  * Bottom sheet on phones, centred dialog from `sm` up - the pattern collectors
@@ -26,30 +56,50 @@ export function Modal({
   size?: "sm" | "md" | "lg";
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+
+  // Callers pass a fresh onClose on every render. Read through an effect event
+  // so the effect below runs on open and close only - not on every keystroke,
+  // which used to pull focus out of the field being typed in.
+  const close = useEffectEvent(() => onClose());
 
   useEffect(() => {
     if (!open) return;
 
+    const id = Symbol("modal");
+    lockScroll(id);
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // Only the dialog on top: Escape on a confirm must not also close the
+      // form underneath it.
+      if (event.key === "Escape" && openStack[openStack.length - 1] === id) close();
     };
     document.addEventListener("keydown", onKeyDown);
 
-    // Stop the page behind the sheet from scrolling.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    // Move focus into the dialog for keyboard and screen-reader users.
-    const firstField = panelRef.current?.querySelector<HTMLElement>(
-      "input, select, textarea, button",
-    );
-    firstField?.focus();
+    // Move focus into the dialog for keyboard and screen-reader users, unless a
+    // field already took it with autoFocus. The first form field, then the
+    // first footer button (Cancel, on a confirm) - never the close button,
+    // which comes first in the markup.
+    const panel = panelRef.current;
+    const returnFocusTo = document.activeElement as HTMLElement | null;
+    if (!panel?.contains(returnFocusTo)) {
+      const target =
+        bodyRef.current?.querySelector<HTMLElement>(FIELD) ??
+        footerRef.current?.querySelector<HTMLElement>("button:not([disabled])") ??
+        bodyRef.current?.querySelector<HTMLElement>("button:not([disabled])");
+      target?.focus();
+    }
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      unlockScroll(id);
+      // Back to where the user was - the Save button under a closing confirm.
+      if (returnFocusTo?.isConnected && !panel?.contains(returnFocusTo)) {
+        returnFocusTo.focus({ preventScroll: true });
+      }
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -89,10 +139,15 @@ export function Modal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div ref={bodyRef} className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          {children}
+        </div>
 
         {footer && (
-          <div className="border-t border-line px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+          <div
+            ref={footerRef}
+            className="border-t border-line px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5"
+          >
             {footer}
           </div>
         )}

@@ -670,6 +670,11 @@ export interface Database {
         Args: { p_client_id: string; p_year?: number | null };
         Returns: Json;
       };
+      /** Names only, for ids RLS hides from a collector - migration 0013. */
+      staff_names: {
+        Args: { p_ids: string[] };
+        Returns: { id: string; full_name: string }[];
+      };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_active_user: { Args: Record<string, never>; Returns: boolean };
       current_user_role: { Args: Record<string, never>; Returns: UserRole };

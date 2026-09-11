@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { escapeLike } from "./clients";
+import { getStaffNames } from "./reports";
 import type {
   BillStatus,
   BillTotalsRow,
@@ -399,5 +400,17 @@ export async function listSubmissions(filters: SubmissionFilters = {}): Promise<
 
   const { data, error } = await query.overrideTypes<SubmissionRow[], { merge: false }>();
   if (error) throw error;
-  return data ?? [];
+  const rows = data ?? [];
+
+  // Under a collector's RLS the receiver (the owner) embeds as null - fill in
+  // whichever names the embed could not see.
+  const names = await getStaffNames(
+    rows.flatMap((row) => [row.collector ? null : row.collector_id, row.receiver ? null : row.received_by]),
+  );
+  const staff = (id: string) => (names.has(id) ? { id, full_name: names.get(id)! } : null);
+  return rows.map((row) => ({
+    ...row,
+    collector: row.collector ?? staff(row.collector_id),
+    receiver: row.receiver ?? staff(row.received_by),
+  }));
 }

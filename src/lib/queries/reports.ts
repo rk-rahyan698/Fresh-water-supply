@@ -327,6 +327,26 @@ export async function listUsers(): Promise<Profile[]> {
 }
 
 /** Everyone who can hold cash: collectors and admins alike. */
+/**
+ * id -> full name for staff, including the ones RLS hides.
+ *
+ * A collector can read only their own profile (0003), so an embedded profile
+ * comes back null for anyone else - the owner who received their cash, or who
+ * approved a discount. staff_names() (0013) returns names and nothing more.
+ * No round trip when there is nothing to look up, which is every owner screen.
+ */
+export async function getStaffNames(
+  ids: (string | null | undefined)[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return new Map();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("staff_names", { p_ids: unique });
+  if (error) throw error;
+  return new Map((data ?? []).map((row) => [row.id, row.full_name]));
+}
+
 export async function listCollectors(): Promise<Profile[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
